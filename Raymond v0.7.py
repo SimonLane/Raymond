@@ -40,7 +40,7 @@ if not demo_mode:
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
         super(Raymond, self).__init__()
-        # self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+        # self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint) # Force GUI to stay on top
         
 # =============================================================================
 #  Microscope properties - edit as needed
@@ -113,6 +113,11 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 # End editable properties      
 # =============================================================================
+        
+        self.window_title = os.path.basename(__file__)
+        
+
+
         self.ListWidgetfromIndex = 0    # keeps track of the last clicked item in inaging set list widget
         self.liveImaging = False        # Keeps track of if microsocpe is currently streaming from the camera
         self.currentImage = None        # Most recently acquired image, to be displayed on the GUI
@@ -136,7 +141,9 @@ class Raymond(QtWidgets.QMainWindow):
         self.tileScanQChecker.timeout.connect(self.imageToMap)
 
 # build the UI
-        self.initUI()     
+        self.initUI()
+        self.information("Loaded GUI from: %s" %(__file__), 'g')
+        
 #  set blank image to the map
         self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
                     levels=(15,240), scale=(1/231,1/231), 
@@ -171,7 +178,7 @@ class Raymond(QtWidgets.QMainWindow):
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def initUI(self):
         self.setScreenSize()
-        self.setWindowTitle('Raymond V0.3')
+        self.setWindowTitle(self.window_title)
         palette = QtGui.QPalette()
         palette.setColor(QtGui.QPalette.Background, self.GUI_colour)
         self.setPalette(palette)
