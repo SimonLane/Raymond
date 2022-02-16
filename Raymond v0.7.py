@@ -9,18 +9,20 @@ v0.2
     Added image viewer window and implemented live view from the Thorlabs camera 
     and the Chameleon camera
 v0.3
+    DONE
+        get display settings working
+        Add Timing, file controls
+        Add information panel
+        Create a separate panel or window for tile scan, allow zoom?
+        display a map of the imaging area, with various settings
     TO-DO
-    get display settings working
-    Add Timing, file controls
-    Create Connection indicator
-    Add information panel
-v0.4
-    Create a separate panel or window for tile scan, allow zoom?
-    display a map of the imaging area, with various settings
+        Create Connection indicator
+    
+    
 
 @author: Simon
 """
-demo_mode = False
+
 
 import sys, time, threading, datetime, queue, glob, os, math
 import pandas           as pd
@@ -53,12 +55,14 @@ class Raymond(QtWidgets.QMainWindow):
         self.setFont(self.GUI_font)
         
         self.userList= []               # List of valid users, created at startup from list of folders in the save root directory 
-        if sys.platform == "win32":  
+        if sys.platform == "win32":
+            demo_mode = False
             self.user_directory = 'D:'
             self.userList = glob.glob('D:\\**\\', recursive=False)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('\\')[-1]
-        if sys.platform == "darwin":    
+        if sys.platform == "darwin":  
+            demo_mode = True
             print('OS: ', sys.platform)
             self.user_directory = 'Users'
             self.userList = glob.glob('/Users/**/', recursive=False)
