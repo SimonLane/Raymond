@@ -16,9 +16,13 @@ v0.3
         Create a separate panel or window for tile scan, allow zoom?
         display a map of the imaging area, with various settings
     TO-DO
-        Create Connection indicator
-    
-    
+        Create Connection indicator - currently output to the info log
+        laser power settings into experiment builder and into data structure
+        User dependant config files
+        Save all settings to config file, not just the experiment builder
+        Add GUI section for environmental information
+        Add GUI section for Rayleigh image processing options
+        Load calibration file for laser powers
 
 @author: Simon
 """
