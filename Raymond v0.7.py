@@ -28,7 +28,7 @@ v0.3
 """
 
 
-import sys, time, threading, datetime, queue, glob, os, math
+import sys, time, threading, datetime, queue, glob, os, math, ctypes
 import pandas           as pd
 import numpy            as np
 import pyqtgraph        as pg
@@ -171,18 +171,19 @@ class Raymond(QtWidgets.QMainWindow):
         # ASI Stage
             self.stage          = Stage_ASI(self, 'ASI Stage', 'COM9')
             self.stage.connect()
+#  setup current user
+            self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
+            i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])# get the last user
+
+        
         if self.demo_mode:
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
+            self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
+            i = self.FileUserList.findText('Simon')# force last user to Simon in demo mode
+            
+        self.FileUserList.setCurrentIndex(i)# set user in file settings pane
+        self.loadDataFrame() # load in the imaging sets
 
-#  get current user
-        # open settings file
-        self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)
-        # get the last user
-        i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])
-        # set user in file settings pane
-        self.FileUserList.setCurrentIndex(i)
-        # load in the imaging sets
-        self.loadDataFrame() 
         
 # Timers
         self.frametimer = QtCore.QTimer() # A timer for grabbing images from the camera buffer during live view mode
@@ -382,7 +383,8 @@ class Raymond(QtWidgets.QMainWindow):
         self.InfoGroup.layout().addWidget(self.Information_text_window,         1,0,1,1)
 
 #~~~~~~~~~~~~~~~ Experiment progress Pane ~~~~~~~~~~~~~~~ 
-
+        self.Expt_Start_button   = QtGui.QPushButton('Start Experiment')
+        self.Expt_Start_button.released.connect(self.Imaging_setup)
         self.progress_c          = QtGui.QProgressBar()
         self.progress_c.setFixedHeight(10)
         self.progress_c.setFixedWidth(200)
@@ -397,14 +399,15 @@ class Raymond(QtWidgets.QMainWindow):
 
         self.ProgressGroup       = QtGui.QGroupBox('Experiment Progress')
         self.ProgressGroup.setLayout(QtGui.QGridLayout())
-        self.ProgressGroup.layout().addWidget(self.progress_c_label,            0,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_z_label,            1,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_p_label,            2,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_t_label,            3,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_c,                  0,2,1,4)
-        self.ProgressGroup.layout().addWidget(self.progress_z,                  1,2,1,4)
-        self.ProgressGroup.layout().addWidget(self.progress_p,                  2,2,1,4)
-        self.ProgressGroup.layout().addWidget(self.progress_t,                  3,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.Expt_Start_button,           0,0,1,3)
+        self.ProgressGroup.layout().addWidget(self.progress_c_label,            1,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_z_label,            2,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_p_label,            3,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_t_label,            4,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_c,                  1,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_z,                  2,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_p,                  3,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_t,                  4,2,1,4)
 
 #~~~~~~~~~~~~~~~ File save Pane ~~~~~~~~~~~~~~~ 
 #Fileing Widgets
@@ -508,16 +511,16 @@ class Raymond(QtWidgets.QMainWindow):
 #==============================================================================
         OverallLayout = QtWidgets.QGridLayout()
 #        using a 20x20 grid for flexible arrangement of the panels
-#Left-hand column                                                                             # (y x h w)
+#Left-hand column                                                             # (y x h w)
         OverallLayout.addWidget(self.ImageDisplayGroup,                         0,0,17,12)
 #Right-hand column                                                                                
         OverallLayout.addWidget(self.ExptBuildGroup,                            0,12,6,9)
         OverallLayout.addWidget(self.ViewFinderGroup,                           6,15,10,6)
 # bottom section        
         OverallLayout.addWidget(self.FileGroup,                                 17,0,3,4)
-        OverallLayout.addWidget(self.ProgressGroup,                             17,4,3,3)
-        OverallLayout.addWidget(self.TimingGroup,                               17,7,3,4)
-        OverallLayout.addWidget(self.ZSlice,                                    17,11,3,3)
+        OverallLayout.addWidget(self.TimingGroup,                               17,4,3,4)
+        OverallLayout.addWidget(self.ZSlice,                                    17,8,3,3)
+        OverallLayout.addWidget(self.ProgressGroup,                             17,11,3,3)
         OverallLayout.addWidget(self.InfoGroup,                                 17,14,3,7)
         for item in [self.ImageDisplayGroup,self.ExptBuildGroup,self.ViewFinderGroup,self.FileGroup,
                       self.ProgressGroup,self.TimingGroup,self.ZSlice,self.InfoGroup]:
@@ -536,8 +539,43 @@ class Raymond(QtWidgets.QMainWindow):
 # Prepare for imaging
     # Build experiment
     def Imaging_setup(self):
-        pass
-    
+        if self.Expt_Start_button.text() == 'Stop Experiment':
+            print('stop button press')
+            self.Expt_Start_button.setText('Stopping...')
+#            self.Gui_to_Thread[-1] = 'stop'
+#            self.ImagingLoopThread.join()
+            
+        if self.Expt_Start_button.text() == 'Start Experiment':
+            self.pickle_Table() #save all settings and positions in case of crash whilst imaging
+            self.pickle_positions()
+            imaging_set = self.build_imaging_set() 
+            timing_interval = int(self.TimingInterval.text())
+            imaging_loops = int(self.TimingLoops.text())
+            crop = self.cropCheckbox.isChecked()
+            eight = self.eightCheckbox.isChecked()
+# test for disk space (in Gb)
+            if not self.demo_mode:
+                req_space = round((imaging_set[imaging_set.Binning == 0].shape[0]*0.008193) + 
+                                  (imaging_set[imaging_set.Binning == 1].shape[0]*0.002049) + 
+                                  (imaging_set[imaging_set.Binning == 2].shape[0]*0.000513),1)*imaging_loops*imaging_set['Location'].max()
+                free_space = ctypes.c_ulonglong(0)
+                ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p('D:'), None, None, ctypes.pointer(free_space))
+                free_space = round(free_space.value/ (1024.0*1024.0*1024.0),1)
+                if free_space-1 < req_space:    self.information("Imaging not possible: %sGb required, %sGb available" %(req_space,free_space), 'r')
+                else: self.information("Storage %sGb required, %sGb available" %(req_space,free_space), 'g')
+# Test for required hardware
+#            Camera
+#            Microscope Control board
+#            Laser Control board
+#            Filter
+#            ETL
+#            Stage
+#            Scan mirror
+#            Visible lasers
+#            NIR lasers
+#            SLM
+
+            self.Expt_Start_button.setText('Stop Experiment')
     # Start job in a new thread
     
     # Start threadsafe timers and queues to handle data flow and GUI updates
@@ -547,7 +585,17 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
-
+    def Imaging_loop(self, imaging_set):
+        timepoints = [0]
+        
+        for t in timepoints:
+#            Timing gate
+            for p in positions:
+#                Stage positioning gate
+                for c in channels:
+                    for z in z_slices:
+                        for w in wavelengths:
+                            time.sleep(0.3)
 
 
 
@@ -908,6 +956,7 @@ class Raymond(QtWidgets.QMainWindow):
             
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
+        if self.demo_mode: address = '/Users/Simon/'
         self.ImagingSets = pd.read_csv("%sImagingParameters.txt" %(address), index_col=0)
         # build the imaging set list widget
         self.ISetListWidget.clear()
@@ -924,6 +973,7 @@ class Raymond(QtWidgets.QMainWindow):
   
     def saveDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
+        if self.demo_mode: address = '/Users/Simon/'
         self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True)
 
 # =============================================================================
