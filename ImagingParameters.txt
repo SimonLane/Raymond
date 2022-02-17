@@ -1,5 +1,4 @@
 ,ID,Act,Nam,Exp,Fil,Bin,Mod,Mus,Zed,Wa1,Wa2,Wa3,Wa4,Wa5,Wa6,Wa7,Wa8,Wa9,Wa10
-0,0,False,Test,10,0,0,0,0,True,True,False,False,False,False,False,False,False,False,False
-1,1,False,C,100,1,0,0,0,True,False,False,True,False,False,False,False,False,False,False
-2,2,True,A,1000,2,0,2,0,True,False,True,False,False,False,False,False,False,False,False
-3,3,True,B,50,2,0,1,0,True,False,True,False,False,False,False,False,False,False,False
+0,0,False,Pete test,100,1,0,0,0,True,False,False,True,False,False,False,False,False,False,False
+1,1,True,A,1000,2,0,2,0,True,False,True,False,False,False,False,False,False,False,False
+2,2,True,B,50,2,0,1,0,True,False,True,False,False,False,False,False,False,False,False

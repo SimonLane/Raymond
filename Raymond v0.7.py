@@ -61,13 +61,14 @@ class Raymond(QtWidgets.QMainWindow):
         
         self.userList= []               # List of valid users, created at startup from list of folders in the save root directory 
         if sys.platform == "win32":
-            demo_mode = False
+            self.demo_mode = False
             self.user_directory = 'D:'
-            self.userList = glob.glob('D:\\**', recursive=False)
+            self.userList = glob.glob('D:\\**\\', recursive=False)
+            print(self.userList)
             for i, item in enumerate(self.userList):
-                self.userList[i] = item.split('\\')[-1]
+                self.userList[i] = item.split('\\')[-2]
         if sys.platform == "darwin":  
-            demo_mode = True
+            self.demo_mode = True
             print('OS: ', sys.platform)
             self.user_directory = 'Users'
             self.userList = glob.glob('/Users/**/', recursive=False)
@@ -108,6 +109,7 @@ class Raymond(QtWidgets.QMainWindow):
         
     # The dataframe used to hold imaging parameters for all defined imaging sets
         self.ISmemory = "ImagingParameters.txt"
+        self.BSmemory = "Settings.txt"
         self.ISheaders = ['ID','Act','Nam','Exp','Fil','Bin','Mod','Mus','Zed','Wa1','Wa2','Wa3','Wa4','Wa5','Wa6','Wa7','Wa8','Wa9']
         self.PGcamSerial = '15322921'
     # Tile area options
@@ -123,9 +125,6 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
         
         self.window_title = os.path.basename(__file__)
-        
-
-
         self.ListWidgetfromIndex = 0    # keeps track of the last clicked item in inaging set list widget
         self.liveImaging = False        # Keeps track of if microsocpe is currently streaming from the camera
         self.currentImage = None        # Most recently acquired image, to be displayed on the GUI
@@ -158,7 +157,7 @@ class Raymond(QtWidgets.QMainWindow):
                     pos=(-11.9,-11.6), autoRange=False)
         
 # connect to devices
-        if not demo_mode:
+        if not self.demo_mode:
         # ThorLabs
             self.TLsdk = TLCameraSDK()
             self.camera1        = Camera_TL(self, 'CS2100-M-1', 0, self.TLsdk)
@@ -172,10 +171,17 @@ class Raymond(QtWidgets.QMainWindow):
         # ASI Stage
             self.stage          = Stage_ASI(self, 'ASI Stage', 'COM9')
             self.stage.connect()
-        if demo_mode:
+        if self.demo_mode:
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
 
-# load in the imaging sets
+#  get current user
+        # open settings file
+        self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)
+        # get the last user
+        i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])
+        # set user in file settings pane
+        self.FileUserList.setCurrentIndex(i)
+        # load in the imaging sets
         self.loadDataFrame() 
         
 # Timers
@@ -408,9 +414,9 @@ class Raymond(QtWidgets.QMainWindow):
 #generate user list
         
         for item in self.userList:
-            if os.path.isdir(item) and len(item) < 15 and item.find("$")==-1: #NOTE, folder names greater than 14 chars will not show!
-                userName = item.split('\\')[-1]
-                self.FileUserList.addItem(userName)
+            if not item.__contains__('.') and len(item) < 15:
+                self.FileUserList.addItem(item)
+                print(item)
         self.FileExptNameLabel              = QtGui.QLabel('Expt. Name:')
         self.FileExptName                   = QtGui.QLineEdit('')
         self.FileExptName.returnPressed.connect(self.update_expt_name)
@@ -497,7 +503,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.ZSlice.layout().addWidget(self.ZSpan,                              2,1,1,2)
         self.ZSlice.layout().addWidget(self.ZDemo,                              3,0,1,3)
         
-        
 #==============================================================================
 # Overall assembly
 #==============================================================================
@@ -526,8 +531,30 @@ class Raymond(QtWidgets.QMainWindow):
         self.setCentralWidget(self.MainArea)
 
 # =============================================================================
+#   Main imaging Loop - Setup
+# =============================================================================
+# Prepare for imaging
+    # Build experiment
+    def Imaging_setup(self):
+        pass
+    
+    # Start job in a new thread
+    
+    # Start threadsafe timers and queues to handle data flow and GUI updates
+    
+    # Send to Control board
+
+# =============================================================================
+#   Main imaging Loop - Imaging Thread
+# =============================================================================
+
+
+
+
+# =============================================================================
 #   ViewFinder functions
 # =============================================================================
+
     def on_click_event(self, event):
         event.accept()
         if event.double():
@@ -679,8 +706,6 @@ class Raymond(QtWidgets.QMainWindow):
             self.imagewidget.setColorMap(self.colourcmap)
         if self.display_colour_mode == 2:
             self.imagewidget.setColorMap(self.limitscmap)
-
-
     
     def liveView(self):
         if self.liveImaging == False:
@@ -882,7 +907,8 @@ class Raymond(QtWidgets.QMainWindow):
             item.setChecked(bool(IS['Wa%s' %str(i+1)]))
             
     def loadDataFrame(self):
-        self.ImagingSets = pd.read_csv(self.ISmemory, index_col=0)
+        address = self.BasicSettings.at[0,'LastUserAddress']
+        self.ImagingSets = pd.read_csv("%sImagingParameters.txt" %(address), index_col=0)
         # build the imaging set list widget
         self.ISetListWidget.clear()
         for n in range(self.ImagingSets.shape[0]):
@@ -897,7 +923,8 @@ class Raymond(QtWidgets.QMainWindow):
         self.set_ISetValues_to_GUI()
   
     def saveDataFrame(self):
-        self.ImagingSets.to_csv(self.ISmemory, mode='w', index=True)
+        address = self.BasicSettings.at[0,'LastUserAddress']
+        self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True)
 
 # =============================================================================
  # Functions for displaying information in the GUI
@@ -919,21 +946,29 @@ class Raymond(QtWidgets.QMainWindow):
         self.Information_text_window.moveCursor(QtGui.QTextCursor.End)
 
     def update_expt_name(self):
-        UserName    = self.FileUserList.currentText()
-        ExptName    = self.FileExptName.text()
+        self.UserName    = self.FileUserList.currentText()
+        if self.UserName != self.BasicSettings.at[0,'LastUser']:
+            self.saveDataFrame()
+            self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
+            self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
+            self.loadDataFrame()
+        self.ExptName    = self.FileExptName.text()
         startdate   = datetime.date.today()
-        if len(ExptName)>0:
-            ExptName = ' (%s)' %(ExptName)
+        if len(self.ExptName)>0:
+            self.ExptName = ' (%s)' %(self.ExptName)
         i=0
         while True:
             i=i+1
             if i==1:
-                StoreLocation = '%s\\%s\\%s%s' %(self.user_directory,UserName,startdate,ExptName)
+                self.StoreLocation = '%s\\%s\\%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
             else:
-                StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,UserName,startdate,i,ExptName)
-            if not os.path.exists(StoreLocation):
-                self.FileAddress.setText(StoreLocation)
+                self.StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
+            if not os.path.exists(self.StoreLocation):
+                self.FileAddress.setText(self.StoreLocation)
                 break
+        self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
+        self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
+        self.BasicSettings.to_csv(self.BSmemory, mode='w', index=True)
 # =============================================================================
 #  Minor functions
 # =============================================================================
@@ -946,7 +981,7 @@ class Raymond(QtWidgets.QMainWindow):
     def closeEvent(self, event): #to do upon GUI being closed
         self.frametimer.stop()
         self.saveDataFrame()
-        if not demo_mode:
+        if not self.demo_mode:
             self.camera1.close()
             self.TLsdk.dispose()
             self.camera3.close()
