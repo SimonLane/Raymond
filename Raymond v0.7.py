@@ -34,7 +34,8 @@ import numpy            as np
 import pyqtgraph        as pg
 from PyQt5 import QtGui, QtWidgets, QtCore
 from scipy.ndimage.filters import gaussian_filter
-if not demo_mode:
+
+if sys.platform == "win32":
     from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
 # my classes
     from Camera_TL          import Camera_TL
@@ -62,7 +63,7 @@ class Raymond(QtWidgets.QMainWindow):
         if sys.platform == "win32":
             demo_mode = False
             self.user_directory = 'D:'
-            self.userList = glob.glob('D:\\**\\', recursive=False)
+            self.userList = glob.glob('D:\\**', recursive=False)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('\\')[-1]
         if sys.platform == "darwin":  
@@ -72,7 +73,6 @@ class Raymond(QtWidgets.QMainWindow):
             self.userList = glob.glob('/Users/**/', recursive=False)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('/')[-2]
-            print(self.userList)
         
 
     # available filters and binning modes
