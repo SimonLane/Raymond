@@ -101,6 +101,20 @@ class Raymond(QtWidgets.QMainWindow):
                 QtWidgets.QCheckBox('850'),
                 QtWidgets.QCheckBox('910')
                 ]
+        
+        self.ISetlightpower = [
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider(),
+                QtWidgets.QSlider()
+                ]
+        
     # default settings applied to new imaging set
         self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Fil':0,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
               'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,
@@ -151,7 +165,8 @@ class Raymond(QtWidgets.QMainWindow):
 # Data Structures
 # =============================================================================
 
-        self.ImagingSets = []
+
+# ~~~~~~~~~~~~~~~end~~~~~~~~~~~~~~
 
 # build the UI
         self.initUI()
@@ -186,7 +201,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
             i = self.FileUserList.findText('Simon')# force last user to Simon in demo mode
-            
+            if i == -1: i = self.FileUserList.findText('simon')
         self.FileUserList.setCurrentIndex(i)# set user in file settings pane
         self.loadDataFrame() # load in the imaging sets
 
@@ -262,15 +277,26 @@ class Raymond(QtWidgets.QMainWindow):
         self.LightsourceLabel    = QtWidgets.QLabel('Wavelengths:')
         self.wavelengthButtonGroup = QtWidgets.QButtonGroup()
         
+        self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
+        self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
         # To DO - add power setting for each wavelength
-        for item in self.ISetlightsource:
+        for i, item in enumerate(self.ISetlightsource):
             self.wavelengthButtonGroup.addButton(item)
             item.stateChanged.connect(self.updateISet)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[i],    i+2,2,1,1)
+            self.ISetlightpower[i].setOrientation(QtCore.Qt.Horizontal)
+            self.ISetlightpower[i].setMinimum(0)
+            self.ISetlightpower[i].setMaximum(100)
+            self.ISetlightpower[i].setTickInterval(10)
+            self.ISetlightpower[i].setTickPosition(QtWidgets.QSlider.TicksBelow)
+            self.ISetlightpower[i].setValue(0)
+            # self.ISetlightpower[i].valueChanged.connect(lambda: pass)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightpower[i],     i+2,3,1,3)
+            
+
         self.wavelengthButtonGroup.setExclusive(True)
 
     # sub-assembly                                                                # (y x h w)    
-        self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
-        self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetActive,            0,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetZ,                 0,2,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.NameLabel,             1,0,1,1)
@@ -287,16 +313,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMusicalN,          6,1,1,1)
         
         self.ImagingSettingsSubGroup.layout().addWidget(self.LightsourceLabel,      1,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[0],    2,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[1],    3,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[2],    4,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[3],    5,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[4],    6,2,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[5],    2,3,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[6],    3,3,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[7],    4,3,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[8],    5,3,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[9],    6,3,1,1)
+
         self.ImagingSettingsSubGroup.layout().addWidget(self.LiveButton,            8,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.GrabButton,            8,1,1,1)
 
