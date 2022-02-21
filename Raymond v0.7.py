@@ -147,6 +147,12 @@ class Raymond(QtWidgets.QMainWindow):
         self.tileScanQChecker.setInterval(10)
         self.tileScanQChecker.timeout.connect(self.imageToMap)
 
+# =============================================================================
+# Data Structures
+# =============================================================================
+
+        self.ImagingSets = []
+
 # build the UI
         self.initUI()
         self.information("Loaded GUI from: %s" %(__file__), 'g')
@@ -586,7 +592,12 @@ class Raymond(QtWidgets.QMainWindow):
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
     def Imaging_loop(self, imaging_set):
-        timepoints = [0]
+        timepoints  = [0]
+        positions   = [0]
+        channels    = [0]
+        z_slices    = [0]
+        wavelengths = [0]
+        
         
         for t in timepoints:
 #            Timing gate
