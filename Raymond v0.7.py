@@ -102,18 +102,7 @@ class Raymond(QtWidgets.QMainWindow):
                 QtWidgets.QCheckBox('910')
                 ]
         
-        self.ISetlightpower = [
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider(),
-                QtWidgets.QSlider()
-                ]
+        
         
     # default settings applied to new imaging set
         self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Fil':0,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
@@ -276,14 +265,19 @@ class Raymond(QtWidgets.QMainWindow):
         self.GrabButton.pressed.connect(self.grabFrame)
         self.LightsourceLabel    = QtWidgets.QLabel('Wavelengths:')
         self.wavelengthButtonGroup = QtWidgets.QButtonGroup()
-        
+
+        self.ISetlightpower = []
+        self.ISetlightpowerlabel = []
+   
         self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
         self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
         # To DO - add power setting for each wavelength
         for i, item in enumerate(self.ISetlightsource):
             self.wavelengthButtonGroup.addButton(item)
             item.stateChanged.connect(self.updateISet)
-            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[i],    i+2,2,1,1)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[i],        i+2,2,1,1)
+            
+            self.ISetlightpower.append(QtWidgets.QSlider())
             self.ISetlightpower[i].setOrientation(QtCore.Qt.Horizontal)
             self.ISetlightpower[i].setMinimum(0)
             self.ISetlightpower[i].setMaximum(100)
@@ -291,8 +285,14 @@ class Raymond(QtWidgets.QMainWindow):
             self.ISetlightpower[i].setTickPosition(QtWidgets.QSlider.TicksBelow)
             self.ISetlightpower[i].setValue(0)
             # self.ISetlightpower[i].valueChanged.connect(lambda: pass)
-            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightpower[i],     i+2,3,1,3)
             
+            self.ISetlightpowerlabel.append(QtWidgets.QLineEdit())
+            self.ISetlightpowerlabel[i].setText('0')
+            self.ISetlightpowerlabel[i].setFixedWidth(30)
+            self.ISetlightpowerlabel[i].setReadOnly(True)
+            
+            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightpower[i],         i+2,4,1,3)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightpowerlabel[i],    i+2,3,1,1)
 
         self.wavelengthButtonGroup.setExclusive(True)
 
@@ -956,11 +956,17 @@ class Raymond(QtWidgets.QMainWindow):
         
         # Push the changes into the ISet list widget (to capture name change, mode change, or active change)
         self.ISetListWidget.currentItem().setText('%s \t\t %s' %(self.ISetName.text(),self.ISetMode.currentText())) #update name
-
+        theFont = QtGui.QFont()
+        
         if self.ISetActive.isChecked():
             self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('green')))
+            theFont.setBold(True)
+            theFont.setUnderline(True)
         else:
-            self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('light grey')))       
+            self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('light grey')))
+            theFont.setBold(False)
+            theFont.setUnderline(False)
+        self.ISetListWidget.currentItem().setFont(theFont)
         # set Values to GUI - deals with changes in mode
         self.set_ISetValues_to_GUI()
         
