@@ -955,11 +955,16 @@ class Raymond(QtWidgets.QMainWindow):
             self.ImagingSets.at[n,'Wa%s' %str(i+1)] = item.isChecked()
             self.ImagingSets.at[n,'Po%s' %str(i+1)] = self.ISetlightpower[i].value()
         
-        # Push the changes into the ISet list widget (to capture name change, mode change, or active change)
-        self.ISetListWidget.currentItem().setText('%s \t\t %s' %(self.ISetName.text(),self.ISetMode.currentText())) #update name
-        theFont = QtGui.QFont()
+        # set Values to GUI - deals with changes in mode
+        # self.set_ISetValues_to_GUI()
         
-        if self.ISetActive.isChecked():
+    def set_ISetValues_to_GUI(self):
+        # get values from the ISet and apply to the widgets in the GUI
+        n = self.ISetListWidget.currentRow()
+        IS = self.ImagingSets.loc[n]
+        self.ISetListWidget.currentItem().setText('%s \t\t %s' %(IS['Nam'],self.imaging_mode_list[IS['Mod']])) #update name
+        theFont = QtGui.QFont()
+        if bool(IS['Act']) == True:
             self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('green')))
             theFont.setBold(True)
             theFont.setUnderline(True)
@@ -968,12 +973,6 @@ class Raymond(QtWidgets.QMainWindow):
             theFont.setBold(False)
             theFont.setUnderline(False)
         self.ISetListWidget.currentItem().setFont(theFont)
-        # set Values to GUI - deals with changes in mode
-        self.set_ISetValues_to_GUI()
-        
-    def set_ISetValues_to_GUI(self):
-        n = self.ISetListWidget.currentRow()
-        IS = self.ImagingSets.loc[n]
         self.ISetActive.setChecked(bool(IS['Act']))
         self.ISetName.setText('%s' %IS['Nam'])
         self.ISetMode.setCurrentIndex(IS['Mod'])
@@ -982,6 +981,19 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
+        print()
+        print('-----%s-----' %IS['Nam'])
+        for i, item in enumerate(self.ISetlightsource):
+            item.setChecked(bool(IS['Wa%s' %str(i+1)]))
+            if IS['Wa%s' %str(i+1)] == True:
+                self.ISetlightpower[i].setEnabled(True)
+                self.ISetlightpowerlabel[i].setText('%s' %IS['Po%s' %str(i+1)])
+                self.ISetlightpower[i].setValue(int(IS['Po%s' %str(i+1)]))
+            else:
+                self.ISetlightpower[i].setEnabled(False)
+                self.ISetlightpowerlabel[i].setText('0')
+                self.ISetlightpower[i].setValue(0)
+        
         if IS['Mod'] == 0: #scattering mode - allows multiple wavelengths
             self.wavelengthButtonGroup.setExclusive(False)
         else:
@@ -990,20 +1002,18 @@ class Raymond(QtWidgets.QMainWindow):
             for i, item in enumerate(self.ISetlightsource):
                 if a == False and IS['Wa%s' %str(i+1)] == True:
                     a = True # skip the first encoutered active wavelength
+                    print(i, 'T', IS['Wa%s' %str(i+1)], IS['Po%s' %str(i+1)])
+
                 else:
+                    print(i, 'F', IS['Wa%s' %str(i+1)], IS['Po%s' %str(i+1)])
                     IS['Wa%s' %str(i+1)] = 0
                     IS['Po%s' %str(i+1)] = 0
-                    item.setChecked(bool(IS['Wa%s' %str(i+1)]))
+                    item.setChecked(False)
                     self.ISetlightpowerlabel[i].setText('0')
                     self.ISetlightpower[i].setValue(0)
             self.wavelengthButtonGroup.setExclusive(True)        
 
-        for i, item in enumerate(self.ISetlightsource):
-            item.setChecked(bool(IS['Wa%s' %str(i+1)]))
-            if IS['Wa%s' %str(i+1)] == True:
-                self.ISetlightpower[i].setVisible(True)
-            else:
-                self.ISetlightpower[i].setVisible(False)
+        
             
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
