@@ -15,10 +15,10 @@ v0.3
         Add information panel
         Create a separate panel or window for tile scan, allow zoom?
         display a map of the imaging area, with various settings
+        User dependant config files
     TO-DO
         Create Connection indicator - currently output to the info log
         laser power settings into experiment builder and into data structure
-        User dependant config files
         Save all settings to config file, not just the experiment builder
         Add GUI section for environmental information
         Add GUI section for Rayleigh image processing options
@@ -189,8 +189,8 @@ class Raymond(QtWidgets.QMainWindow):
         if self.demo_mode:
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
-            i = self.FileUserList.findText('Simon')# force last user to Simon in demo mode
-            if i == -1: i = self.FileUserList.findText('simon')
+            i = self.FileUserList.findText('Demo')# force last user to Demo in demo mode
+            # if i == -1: i = self.FileUserList.findText('Simon')
         self.FileUserList.setCurrentIndex(i)# set user in file settings pane
         self.loadDataFrame() # load in the imaging sets
 
@@ -220,43 +220,43 @@ class Raymond(QtWidgets.QMainWindow):
         self.DelISetButton.released.connect(lambda: self.deleteISet())
         
         self.ISetListWidget      = QtWidgets.QListWidget()
-        self.ISetListWidget.itemClicked.connect(self.set_ISetValues_to_GUI)
+        self.ISetListWidget.itemClicked.connect(self.dataframe_to_GUI)
         self.ISetListWidget.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.ISetListWidget.itemEntered.connect(self.storeFromIndex)
         self.ISetListWidget.model().rowsMoved.connect(self.ISetOrderChange)
         
         self.ISetActive          = QtWidgets.QCheckBox('active')
-        self.ISetActive.clicked.connect(self.updateISet)
+        self.ISetActive.clicked.connect(self.GUI_to_dataframe)
         
         self.NameLabel           = QtWidgets.QLabel('Name:')
         self.ISetName            = QtWidgets.QLineEdit('name')
-        self.ISetName.editingFinished.connect(self.updateISet)
+        self.ISetName.editingFinished.connect(self.GUI_to_dataframe)
         
         self.ModeLabel           = QtWidgets.QLabel('Imaging Mode:')
         self.ISetMode            = QtWidgets.QComboBox()
         self.ISetMode.addItems(self.imaging_mode_list)
-        self.ISetMode.currentIndexChanged.connect(self.updateISet)
+        self.ISetMode.currentIndexChanged.connect(self.update_imaging_mode)
         
         self.FilterLabel         = QtWidgets.QLabel('Filter:')
         self.ISetFilter          = QtWidgets.QComboBox()
         self.ISetFilter.addItems(self.filter_list)
-        self.ISetFilter.currentIndexChanged.connect(self.updateISet)
+        self.ISetFilter.currentIndexChanged.connect(self.GUI_to_dataframe)
         self.ISetFilter.setFixedWidth(90)
         
         self.BinningLabel        = QtWidgets.QLabel('Binning:')
         self.ISetBinning         = QtWidgets.QComboBox()
         self.ISetBinning.addItems(self.binning_list)
-        self.ISetBinning.currentIndexChanged.connect(self.updateISet)
+        self.ISetBinning.currentIndexChanged.connect(self.GUI_to_dataframe)
         
         self.ISetExposure        = QtWidgets.QLineEdit('10')
-        self.ISetExposure.editingFinished.connect(self.updateISet)
+        self.ISetExposure.editingFinished.connect(self.GUI_to_dataframe)
         self.ExposureLabel       = QtWidgets.QLabel('Exposure(ms):')
         
         self.ISetZ               = QtWidgets.QCheckBox('Z-stack')
-        self.ISetZ.clicked.connect(self.updateISet)
+        self.ISetZ.clicked.connect(self.GUI_to_dataframe)
         
         self.ISetMusicalN        = QtWidgets.QLineEdit('50')
-        self.ISetMusicalN.editingFinished.connect(self.updateISet)
+        self.ISetMusicalN.editingFinished.connect(self.GUI_to_dataframe)
         self.MusicalLabel        = QtWidgets.QLabel('Musical (n Frames):')
         
         self.LiveButton          = QtWidgets.QPushButton('Live')
@@ -271,20 +271,20 @@ class Raymond(QtWidgets.QMainWindow):
    
         self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
         self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
-        # To DO - add power setting for each wavelength
+        
         for i, item in enumerate(self.ISetlightsource):
             self.wavelengthButtonGroup.addButton(item)
-            item.stateChanged.connect(self.updateISet)
+            item.stateChanged.connect(self.GUI_to_dataframe)
             self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[i],        i+2,2,1,1)
             
             self.ISetlightpower.append(QtWidgets.QSlider())
             self.ISetlightpower[i].setOrientation(QtCore.Qt.Horizontal)
             self.ISetlightpower[i].setMinimum(0)
             self.ISetlightpower[i].setMaximum(100)
-            self.ISetlightpower[i].setTickInterval(10)
+            self.ISetlightpower[i].setTickInterval(5)
             self.ISetlightpower[i].setTickPosition(QtWidgets.QSlider.TicksBelow)
             self.ISetlightpower[i].setValue(0)
-            # self.ISetlightpower[i].valueChanged.connect(lambda: pass)
+            self.ISetlightpower[i].valueChanged.connect(lambda: self.adjustLaserPower())
             
             self.ISetlightpowerlabel.append(QtWidgets.QLineEdit())
             self.ISetlightpowerlabel[i].setText('0')
@@ -938,9 +938,9 @@ class Raymond(QtWidgets.QMainWindow):
         # reset the main leftmost index
         self.ImagingSets = self.ImagingSets.reset_index(drop=True)
 
-    def updateISet(self):
-        # run this function when any part of the settings box is changed. 
-        # position of the ISet to be updated (in the WidgetList, and in the ImagingSets)
+    def GUI_to_dataframe(self):
+        pass
+        # run this function to push settings from the GUI into the dataframe 
         n = self.ISetListWidget.currentRow()
         # Push the changes into the data frame
         self.ImagingSets.at[n,'Act'] = self.ISetActive.isChecked()
@@ -951,14 +951,24 @@ class Raymond(QtWidgets.QMainWindow):
         self.ImagingSets.at[n,'Exp'] = self.ISetExposure.text()
         self.ImagingSets.at[n,'Zed'] = self.ISetZ.isChecked()
         self.ImagingSets.at[n,'Mus'] = self.ISetMusicalN.text()
+        s = False
         for i, item in enumerate(self.ISetlightsource):
-            self.ImagingSets.at[n,'Wa%s' %str(i+1)] = item.isChecked()
+            if s == False or self.ISetMode.currentIndex() == 0:
+                self.ImagingSets.at[n,'Wa%s' %str(i+1)] = item.isChecked()
+                self.ImagingSets.at[n,'Po%s' %str(i+1)] = self.ISetlightpower[i].value()
+            if item.isChecked:
+                s = True
+
+        # set Values to GUI - deals with changes in mode
+        self.dataframe_to_GUI()
         
-        # Push the changes into the ISet list widget (to capture name change, mode change, or active change)
-        self.ISetListWidget.currentItem().setText('%s \t\t %s' %(self.ISetName.text(),self.ISetMode.currentText())) #update name
+    def dataframe_to_GUI(self):
+        # get values from the dataframe and apply to the widgets in the GUI
+        n = self.ISetListWidget.currentRow()
+        IS = self.ImagingSets.loc[n]
+        self.ISetListWidget.currentItem().setText('%s \t\t %s' %(IS['Nam'],self.imaging_mode_list[IS['Mod']])) #update name
         theFont = QtGui.QFont()
-        
-        if self.ISetActive.isChecked():
+        if bool(IS['Act']) == True:
             self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('green')))
             theFont.setBold(True)
             theFont.setUnderline(True)
@@ -967,55 +977,100 @@ class Raymond(QtWidgets.QMainWindow):
             theFont.setBold(False)
             theFont.setUnderline(False)
         self.ISetListWidget.currentItem().setFont(theFont)
-        # set Values to GUI - deals with changes in mode
-        self.set_ISetValues_to_GUI()
-        
-    def set_ISetValues_to_GUI(self):
-        n = self.ISetListWidget.currentRow()
-        IS = self.ImagingSets.loc[n]
         self.ISetActive.setChecked(bool(IS['Act']))
         self.ISetName.setText('%s' %IS['Nam'])
         self.ISetMode.setCurrentIndex(IS['Mod'])
-        if IS['Mod'] == 0: #scattering mode - allows multiple wavelengths
-            self.wavelengthButtonGroup.setExclusive(False)
-        else:
-            self.wavelengthButtonGroup.setExclusive(True)
         self.ISetFilter.setCurrentIndex(IS['Fil'])
         self.ISetBinning.setCurrentIndex(IS['Bin'])
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
+        print()
+        print('-----%s-----' %IS['Nam'])
         for i, item in enumerate(self.ISetlightsource):
-            item.setChecked(bool(IS['Wa%s' %str(i+1)]))
+            item.setChecked(bool(IS['Wa%s' %str(i+1)])) #set each wavelength on or off according to the dataframe
+            if IS['Wa%s' %str(i+1)] == True:
+                self.ISetlightpower[i].setEnabled(True)
+                self.ISetlightpowerlabel[i].setText('%s' %IS['Po%s' %str(i+1)])
+                self.ISetlightpower[i].setValue(int(IS['Po%s' %str(i+1)]))
+            else:
+                self.ISetlightpower[i].setEnabled(False)
+                self.ISetlightpowerlabel[i].setText('0')
+                self.ISetlightpower[i].setValue(0)
+        
+        if IS['Mod'] == 0: #scattering mode - allows multiple wavelengths
+            self.wavelengthButtonGroup.setExclusive(False)
+        else:
+            
+            self.wavelengthButtonGroup.setExclusive(True)      
+       
+    def update_imaging_mode(self):
+        pass
+        n = self.ISetListWidget.currentRow()
+        IS = self.ImagingSets.loc[n]
+        # remove all but first wavelength selected
+        a = False 
+        for i, item in enumerate(self.ISetlightsource):
+            if a == False and IS['Wa%s' %str(i+1)] == True:
+                a = True # skip the first encoutered active wavelength
+                print(i, 'T', IS['Wa%s' %str(i+1)], IS['Po%s' %str(i+1)])
+                item.setChecked(True)
+                self.ISetlightpowerlabel[i].setText('%s' %(IS['Po%s' %str(i+1)]))
+                self.ISetlightpower[i].setValue(IS['Po%s' %str(i+1)])
+            else:
+                print(i, 'F', IS['Wa%s' %str(i+1)], IS['Po%s' %str(i+1)])
+                IS['Wa%s' %str(i+1)] = 0
+                IS['Po%s' %str(i+1)] = 0
+                item.setChecked(False)
+                self.ISetlightpowerlabel[i].setText('0')
+                self.ISetlightpower[i].setValue(0)   
+        self.GUI_to_dataframe()
+        
             
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
-        if self.demo_mode: address = '/Users/Simon/'
+        if self.demo_mode: address = '/Users/Demo/'
         self.ImagingSets = pd.read_csv("%sImagingParameters.txt" %(address), index_col=0)
         # build the imaging set list widget
         self.ISetListWidget.clear()
+        theFont = QtGui.QFont()
         for n in range(self.ImagingSets.shape[0]):
             IS = self.ImagingSets.loc[n]
             i = QtWidgets.QListWidgetItem()
             i.setText('%s \t\t %s' %(IS['Nam'], self.imaging_mode_list[IS['Mod']]))
-            if IS['Act']:   i.setBackground(QtGui.QBrush(QtGui.QColor('green')))
-            else:           i.setBackground(QtGui.QBrush(QtGui.QColor('light grey')))
+            if IS['Act']:   
+                i.setBackground(QtGui.QBrush(QtGui.QColor('green')))
+                theFont.setBold(True)
+                theFont.setUnderline(True)
+            else:           
+                i.setBackground(QtGui.QBrush(QtGui.QColor('light grey')))
+                theFont.setBold(False)
+                theFont.setUnderline(False)
+            i.setFont(theFont)
             self.ISetListWidget.insertItem(n,i)
+            
+
         #select first set by default
         self.ISetListWidget.setCurrentRow(0)
-        self.set_ISetValues_to_GUI()
+        self.dataframe_to_GUI()
   
     def saveDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
-        if self.demo_mode: address = '/Users/Simon/'
+        if self.demo_mode: address = '/Users/Demo/'
         self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True)
 
+
+    def adjustLaserPower(self):
+        for i, item in enumerate(self.ISetlightpower):
+            p = item.value()
+            self.ISetlightpowerlabel[i].setText(str(p))
+        self.GUI_to_dataframe()
+        
 # =============================================================================
  # Functions for displaying information in the GUI
 # =============================================================================
 
     def information(self, info, colour):
-
         self.Information_text_window.moveCursor(QtGui.QTextCursor.End)
         now=datetime.datetime.now()
         d = '%02d:%02d:%02d - '%(now.hour,now.minute,now.second)
