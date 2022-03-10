@@ -106,8 +106,8 @@ class Raymond(QtWidgets.QMainWindow):
         
     # default settings applied to new imaging set
         self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Fil':0,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
-              'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,
-              'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False}, index=[-1])
+              'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False,
+              'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0}, index=[-1])
     # basic properties for the UI
         
     # The dataframe used to hold imaging parameters for all defined imaging sets
@@ -287,7 +287,7 @@ class Raymond(QtWidgets.QMainWindow):
             
             self.ISetlightpowerlabel.append(QtWidgets.QLineEdit())
             self.ISetlightpowerlabel[i].setText('0')
-            self.ISetlightpowerlabel[i].setFixedWidth(30)
+            self.ISetlightpowerlabel[i].setFixedWidth(35)
             self.ISetlightpowerlabel[i].setReadOnly(True)
             
             self.ImagingSettingsSubGroup.layout().addWidget(self.ISetlightsource[i],        i+2,2,1,1)
@@ -297,7 +297,7 @@ class Raymond(QtWidgets.QMainWindow):
 
     # sub-assembly                                                                # (y x h w)    
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetActive,            0,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetZ,                 0,2,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetZ,                 0,2,1,2)
         self.ImagingSettingsSubGroup.layout().addWidget(self.NameLabel,             1,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetName,              1,1,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ModeLabel,             2,0,1,1)
@@ -311,7 +311,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ImagingSettingsSubGroup.layout().addWidget(self.MusicalLabel,          6,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMusicalN,          6,1,1,1)
         
-        self.ImagingSettingsSubGroup.layout().addWidget(self.LightsourceLabel,      1,2,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.LightsourceLabel,      1,2,1,2)
 
         self.ImagingSettingsSubGroup.layout().addWidget(self.LiveButton,            8,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.GrabButton,            8,1,1,1)
@@ -942,12 +942,7 @@ class Raymond(QtWidgets.QMainWindow):
         # function called by change in value/state of any widget for experimental settings
         
         n = self.ISetListWidget.currentRow()
-        # if n == self.ListWidgetfromIndex: #The imaging set has not changed
-        #     pass
-        # else:                           #The imaging set has changed, update the data frame with the previous selection
-        #     self.ListWidgetfromIndex = n
-        #     n = self.ListWidgetfromIndex
-        # Push the changes into the data frame
+
         self.ImagingSets.at[n,'Act'] = self.ISetActive.isChecked()
         self.ImagingSets.at[n,'Nam'] = self.ISetName.text()
         self.ImagingSets.at[n,'Mod'] = self.ISetMode.currentIndex()
@@ -982,11 +977,9 @@ class Raymond(QtWidgets.QMainWindow):
         if bool(IS['Act']) == True:
             self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('green')))
             theFont.setBold(True)
-            theFont.setUnderline(True)
         else:
             self.ISetListWidget.currentItem().setBackground(QtGui.QBrush(QtGui.QColor('light grey')))
             theFont.setBold(False)
-            theFont.setUnderline(False)
         self.ISetListWidget.currentItem().setFont(theFont)
         self.ISetActive.setChecked(bool(IS['Act']))
         self.ISetName.setText('%s' %IS['Nam'])
@@ -996,10 +989,9 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
-
+# set the laser related widgets
         self.wavelengthButtonGroup.setExclusive(False) 
         for i, item in enumerate(self.ISetlightsource):
-            print(item.isChecked(), IS['Wa%s' %str(i+1)])
             #set each wavelength on or off according to the dataframe
             self.ISetlightsource[i].setChecked(bool(IS['Wa%s' %str(i+1)]))
             self.ISetlightpower[i].setEnabled(bool(IS['Wa%s' %str(i+1)]))
@@ -1022,11 +1014,9 @@ class Raymond(QtWidgets.QMainWindow):
             if IS['Act']:   
                 i.setBackground(QtGui.QBrush(QtGui.QColor('green')))
                 theFont.setBold(True)
-                theFont.setUnderline(True)
             else:           
                 i.setBackground(QtGui.QBrush(QtGui.QColor('light grey')))
                 theFont.setBold(False)
-                theFont.setUnderline(False)
             i.setFont(theFont)
             self.ISetListWidget.insertItem(n,i)
 
