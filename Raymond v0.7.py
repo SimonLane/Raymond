@@ -16,9 +16,9 @@ v0.3
         Create a separate panel or window for tile scan, allow zoom?
         display a map of the imaging area, with various settings
         User dependant config files
+        laser power settings into experiment builder and into data structure
     TO-DO
         Create Connection indicator - currently output to the info log
-        laser power settings into experiment builder and into data structure
         Save all settings to config file, not just the experiment builder
         Add GUI section for environmental information
         Add GUI section for Rayleigh image processing options
@@ -33,6 +33,9 @@ import pandas           as pd
 import numpy            as np
 import pyqtgraph        as pg
 from PyQt5 import QtGui, QtWidgets, QtCore
+from PyQt5.QtCore import Qt
+
+
 from scipy.ndimage.filters import gaussian_filter
 
 if sys.platform == "win32":
@@ -42,8 +45,21 @@ if sys.platform == "win32":
     from Camera_PG          import Camera_PG
     from Stage_ASI          import Stage_ASI
 
- 
-           
+
+class CheckableComboBox(QtWidgets.QComboBox):
+    def __init__(self, parent = None):
+        super(CheckableComboBox, self).__init__(parent)
+        self.view().pressed.connect(self.handleItemPressed)
+        self.setModel(QtGui.QStandardItemModel(self))
+
+    def handleItemPressed(self, index):
+        item = self.model().itemFromIndex(index)
+        if item.checkState() == Qt.Checked:
+            item.setCheckState(Qt.Unchecked)
+        else:
+            item.setCheckState(Qt.Checked)    
+            
+            
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
         super(Raymond, self).__init__()
@@ -238,10 +254,11 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetMode.currentIndexChanged.connect(self.GUI_to_dataframe)
         
         self.FilterLabel         = QtWidgets.QLabel('Filter:')
-        self.ISetFilter          = QtWidgets.QComboBox()
+        self.ISetFilter          = CheckableComboBox(self)
         self.ISetFilter.addItems(self.filter_list)
-        self.ISetFilter.currentIndexChanged.connect(self.GUI_to_dataframe)
+        # self.ISetFilter.currentItemChanged.connect(self.GUI_to_dataframe)
         self.ISetFilter.setFixedWidth(90)
+
         
         self.BinningLabel        = QtWidgets.QLabel('Binning:')
         self.ISetBinning         = QtWidgets.QComboBox()
@@ -984,7 +1001,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetActive.setChecked(bool(IS['Act']))
         self.ISetName.setText('%s' %IS['Nam'])
         self.ISetMode.setCurrentIndex(IS['Mod'])
-        self.ISetFilter.setCurrentIndex(IS['Fil'])
+        # self.ISetFilter.setCurrentIndex(IS['Fil'])
         self.ISetBinning.setCurrentIndex(IS['Bin'])
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
