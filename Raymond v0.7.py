@@ -621,7 +621,20 @@ class Raymond(QtWidgets.QMainWindow):
     # Start threadsafe timers and queues to handle data flow and GUI updates
     
     # Send to Control board
-
+    
+    def build_imaging_set(self):
+        pass
+        # access the dataframe
+        
+        # loop through active modes
+        
+        # generate list of individual scans:
+            # - positions           (x,y,z)
+            # - Zs                  (n, step size)
+            # - lambda              ()
+            
+        # sort according to user selection
+    
 # =============================================================================
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
