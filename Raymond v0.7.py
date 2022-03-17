@@ -57,7 +57,8 @@ class CheckableComboBox(QtWidgets.QComboBox):
         if item.checkState() == Qt.Checked:
             item.setCheckState(Qt.Unchecked)
         else:
-            item.setCheckState(Qt.Checked)    
+            item.setCheckState(Qt.Checked)
+        self.parent().GUI_to_dataframe()
             
             
 class Raymond(QtWidgets.QMainWindow):
@@ -957,7 +958,7 @@ class Raymond(QtWidgets.QMainWindow):
     def GUI_to_dataframe(self):
         # run this function to push settings from the GUI into the dataframe 
         # function called by change in value/state of any widget for experimental settings
-        
+        print(1)
         n = self.ISetListWidget.currentRow()
 
         self.ImagingSets.at[n,'Act'] = self.ISetActive.isChecked()
