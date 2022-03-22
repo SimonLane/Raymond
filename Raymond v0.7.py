@@ -95,12 +95,12 @@ class Raymond(QtWidgets.QMainWindow):
 
     # available filters and binning modes
         self.filter_list = [
-                "Empty",
-                "610+-30, 650SP",
-                "520+-20, 650SP",
-                "Pol. V",
-                "Pol. H",
-                "Empty"
+                QtWidgets.QCheckBox("490 +-10"),
+                QtWidgets.QCheckBox("610 +-30, 650SP"),
+                QtWidgets.QCheckBox("520 +-20, 650SP"),
+                QtWidgets.QCheckBox("Pol. V"),
+                QtWidgets.QCheckBox("Pol. H"),
+                QtWidgets.QCheckBox("Empty")
                 ]
         self.binning_list = ['1','2','4','8']
     # available imaging modalities
@@ -124,13 +124,13 @@ class Raymond(QtWidgets.QMainWindow):
     # default settings applied to new imaging set
         self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Fil':0,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
               'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False,
-              'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0}, index=[-1])
+              'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0,
+              'Fi1':True,'Fi2':False,'Fi3':False,'Fi4':False,'Fi5':False,'Fi6':False}, index=[-1])
     # basic properties for the UI
         
     # The dataframe used to hold imaging parameters for all defined imaging sets
         self.ISmemory = "ImagingParameters.txt"
         self.BSmemory = "Settings.txt"
-        self.ISheaders = ['ID','Act','Nam','Exp','Fil','Bin','Mod','Mus','Zed','Wa1','Wa2','Wa3','Wa4','Wa5','Wa6','Wa7','Wa8','Wa9']
         self.PGcamSerial = '15322921'
     # Tile area options
         self.tileAreaNames = [
@@ -255,11 +255,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetMode.currentIndexChanged.connect(self.GUI_to_dataframe)
         
         self.FilterLabel         = QtWidgets.QLabel('Filter:')
-        self.ISetFilter          = CheckableComboBox(self)
-        self.ISetFilter.addItems(self.filter_list)
-        # self.ISetFilter.currentItemChanged.connect(self.GUI_to_dataframe)
-        self.ISetFilter.setFixedWidth(90)
-
+        self.filterButtonGroup = QtWidgets.QButtonGroup()
         
         self.BinningLabel        = QtWidgets.QLabel('Binning:')
         self.ISetBinning         = QtWidgets.QComboBox()
@@ -289,6 +285,12 @@ class Raymond(QtWidgets.QMainWindow):
    
         self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
         self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
+        
+        for i, item in enumerate(self.filter_list):
+            self.filterButtonGroup.addButton(item)
+            item.stateChanged.connect(self.GUI_to_dataframe)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.filter_list[i],        i+3,1,1,1)
+        self.filterButtonGroup.setExclusive(True)
         
         for i, item in enumerate(self.ISetlightsource):
             self.wavelengthButtonGroup.addButton(item)
@@ -321,18 +323,17 @@ class Raymond(QtWidgets.QMainWindow):
         self.ImagingSettingsSubGroup.layout().addWidget(self.ModeLabel,             2,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMode,              2,1,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.FilterLabel,           3,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetFilter,            3,1,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.BinningLabel,          4,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetBinning,           4,1,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ExposureLabel,         5,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetExposure,          5,1,1,1)       
-        self.ImagingSettingsSubGroup.layout().addWidget(self.MusicalLabel,          6,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMusicalN,          6,1,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.BinningLabel,          8,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetBinning,           8,1,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ExposureLabel,         9,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetExposure,          9,1,1,1)       
+        self.ImagingSettingsSubGroup.layout().addWidget(self.MusicalLabel,          10,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMusicalN,          10,1,1,1)
         
         self.ImagingSettingsSubGroup.layout().addWidget(self.LightsourceLabel,      1,2,1,2)
 
-        self.ImagingSettingsSubGroup.layout().addWidget(self.LiveButton,            8,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.GrabButton,            8,1,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.LiveButton,            11,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.GrabButton,            11,1,1,1)
 
     # assembly                                                                # (y x h w)
         self.ExptBuildGroup     = QtWidgets.QGroupBox('Experiment Builder')
@@ -513,10 +514,8 @@ class Raymond(QtWidgets.QMainWindow):
         self.TimingGroup.layout().addWidget(self.TimingLabel3,                  2,0,1,1)
         self.TimingGroup.layout().addWidget(self.TimingDuration,                2,1,1,1)
     
-
 #~~~~~~~~~~~~~~~ Z-stack Pane ~~~~~~~~~~~~~~~ 
         
-
         self.ZLabel1                    = QtGui.QLabel('Slices:')
         self.ZSlices                    = QtGui.QLineEdit('11')
         self.ZLabel2                    = QtGui.QLabel('Separation:')
@@ -623,9 +622,10 @@ class Raymond(QtWidgets.QMainWindow):
     # Send to Control board
     
     def build_imaging_set(self):
-        pass
+        self.saveDataFrame()
         # access the dataframe
-        
+        for n in range(self.ImagingSets.shape[0]):
+            print(n)
         # loop through active modes
         
         # generate list of individual scans:
@@ -971,13 +971,10 @@ class Raymond(QtWidgets.QMainWindow):
     def GUI_to_dataframe(self):
         # run this function to push settings from the GUI into the dataframe 
         # function called by change in value/state of any widget for experimental settings
-        print(1)
         n = self.ISetListWidget.currentRow()
-
         self.ImagingSets.at[n,'Act'] = self.ISetActive.isChecked()
         self.ImagingSets.at[n,'Nam'] = self.ISetName.text()
         self.ImagingSets.at[n,'Mod'] = self.ISetMode.currentIndex()
-        self.ImagingSets.at[n,'Fil'] = self.ISetFilter.currentIndex()
         self.ImagingSets.at[n,'Bin'] = self.ISetBinning.currentIndex()
         self.ImagingSets.at[n,'Exp'] = self.ISetExposure.text()
         self.ImagingSets.at[n,'Zed'] = self.ISetZ.isChecked()
@@ -987,6 +984,9 @@ class Raymond(QtWidgets.QMainWindow):
             for i, item in enumerate(self.ISetlightsource):
                 self.ImagingSets.at[n,'Wa%s' %str(i+1)] = item.isChecked()
                 self.ImagingSets.at[n,'Po%s' %str(i+1)] = self.ISetlightpower[i].value()
+            for i, item in enumerate(self.filter_list):
+                self.ImagingSets.at[n,'Fi%s' %str(i+1)] = item.isChecked()
+                
         else:                                                                   # Other modes
             first_checked = False
             for i, item in enumerate(self.ISetlightsource):                     # remove all but first selection from the dataframe
@@ -997,6 +997,13 @@ class Raymond(QtWidgets.QMainWindow):
                     first_checked = True
                     self.ImagingSets.at[n,'Wa%s' %str(i+1)] = True
                     self.ImagingSets.at[n,'Po%s' %str(i+1)] = self.ISetlightpower[i].value() 
+            first_checked = False
+            for i, item in enumerate(self.filter_list):                     # remove all but first selection from the dataframe
+                if not item.isChecked() or first_checked:
+                    self.ImagingSets.at[n,'Fi%s' %str(i+1)] = False
+                if item.isChecked() and first_checked == False:
+                    first_checked = True
+                    self.ImagingSets.at[n,'Fi%s' %str(i+1)] = True
         self.dataframe_to_GUI()
         
     def dataframe_to_GUI(self):
@@ -1015,26 +1022,31 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetActive.setChecked(bool(IS['Act']))
         self.ISetName.setText('%s' %IS['Nam'])
         self.ISetMode.setCurrentIndex(IS['Mod'])
-        # self.ISetFilter.setCurrentIndex(IS['Fil'])
         self.ISetBinning.setCurrentIndex(IS['Bin'])
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
 # set the laser related widgets
-        self.wavelengthButtonGroup.setExclusive(False) 
+        self.wavelengthButtonGroup.setExclusive(False)
+        self.filterButtonGroup.setExclusive(False) 
         for i, item in enumerate(self.ISetlightsource):
             #set each wavelength on or off according to the dataframe
             self.ISetlightsource[i].setChecked(bool(IS['Wa%s' %str(i+1)]))
             self.ISetlightpower[i].setEnabled(bool(IS['Wa%s' %str(i+1)]))
             self.ISetlightpowerlabel[i].setText('%s' %IS['Po%s' %str(i+1)])
             self.ISetlightpower[i].setValue(int(IS['Po%s' %str(i+1)]))
+        for i, item in enumerate(self.filter_list):
+            #set each wavelength on or off according to the dataframe
+            self.filter_list[i].setChecked(bool(IS['Fi%s' %str(i+1)]))    
+            
         if IS['Mod'] != 0: # not scattering mode - prevent multiple wavelengths
             self.wavelengthButtonGroup.setExclusive(True) 
+            self.filterButtonGroup.setExclusive(True) 
      
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
         if self.demo_mode: address = '/Users/Demo/'
-        self.ImagingSets = pd.read_csv("%sImagingParameters.txt" %(address), index_col=0)
+        self.ImagingSets = pd.read_table("%sImagingParameters.txt" %(address), index_col=0)
         # build the imaging set list widget
         self.ISetListWidget.clear()
         theFont = QtGui.QFont()
@@ -1058,7 +1070,7 @@ class Raymond(QtWidgets.QMainWindow):
     def saveDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
         if self.demo_mode: address = '/Users/Demo/'
-        self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True)
+        self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True, sep ='\t')
         
 # =============================================================================
  # Functions for displaying information in the GUI
