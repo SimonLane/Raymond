@@ -22,6 +22,7 @@ v0.3
         Save all settings to config file, not just the experiment builder
         Add GUI section for environmental information
         Add GUI section for Rayleigh image processing options
+        Add GUI section for locations, and button to load in saved locations
         Load calibration file for laser powers
 
 @author: Simon
@@ -122,7 +123,7 @@ class Raymond(QtWidgets.QMainWindow):
         
         
     # default settings applied to new imaging set
-        self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Fil':0,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
+        self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
               'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False,
               'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0,
               'Fi1':True,'Fi2':False,'Fi3':False,'Fi4':False,'Fi5':False,'Fi6':False}, index=[-1])
@@ -158,6 +159,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.limitscmap = pg.ColorMap([0.0,0.01,0.99,1.0],[[0,255,0,255],[0,0,0,255],[255,255,255,255],[255,0,0,255]])
         self.defaultcmap = pg.ColorMap([0.0,1.0],[[0,0,0,255],[255,255,255,255]])
         self.max_pixel_value = 255                                              #default to 255, then update after querying camera
+        self.updatingGUI = False                                                 #to only allow GUI to be updated by only a single function at a time
 # =============================================================================
 # Queues and threads
 # =============================================================================
@@ -585,8 +587,10 @@ class Raymond(QtWidgets.QMainWindow):
 #            self.ImagingLoopThread.join()
             
         if self.Expt_Start_button.text() == 'Start Experiment':
-            self.pickle_Table() #save all settings and positions in case of crash whilst imaging
-            self.pickle_positions()
+            #save all settings and positions in case of crash whilst imaging
+            self.saveDataFrame()
+            #ToDo - switch to using a pandas table
+            self.saveStagePositions()
             imaging_set = self.build_imaging_set() 
             timing_interval = int(self.TimingInterval.text())
             imaging_loops = int(self.TimingLoops.text())
@@ -622,10 +626,10 @@ class Raymond(QtWidgets.QMainWindow):
     # Send to Control board
     
     def build_imaging_set(self):
-        self.saveDataFrame()
         # access the dataframe
         for n in range(self.ImagingSets.shape[0]):
-            print(n)
+            IS = self.ImagingSets.loc[n]
+            print(n, IS)
         # loop through active modes
         
         # generate list of individual scans:
@@ -786,7 +790,9 @@ class Raymond(QtWidgets.QMainWindow):
                     levels=(15,240), scale=(1/231,1/231), 
                     pos=(-11.9,-11.6), autoRange=False)
             
-            
+    def saveStagePositions(self):
+        pass
+         
 # =============================================================================
 #  Image Display Functions
 # =============================================================================
@@ -1007,6 +1013,8 @@ class Raymond(QtWidgets.QMainWindow):
         self.dataframe_to_GUI()
         
     def dataframe_to_GUI(self):
+        if self.updatingGUI: return
+        self.updatingGUI = True
         # get values from the dataframe and apply to the widgets in the GUI
         n = self.ISetListWidget.currentRow()
         IS = self.ImagingSets.loc[n]
@@ -1026,23 +1034,27 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
+        print(IS['Nam'], time.time())
 # set the laser related widgets
         self.wavelengthButtonGroup.setExclusive(False)
         self.filterButtonGroup.setExclusive(False) 
         for i, item in enumerate(self.ISetlightsource):
+            pass
             #set each wavelength on or off according to the dataframe
             self.ISetlightsource[i].setChecked(bool(IS['Wa%s' %str(i+1)]))
             self.ISetlightpower[i].setEnabled(bool(IS['Wa%s' %str(i+1)]))
             self.ISetlightpowerlabel[i].setText('%s' %IS['Po%s' %str(i+1)])
             self.ISetlightpower[i].setValue(int(IS['Po%s' %str(i+1)]))
         for i, item in enumerate(self.filter_list):
+            print(i, IS['Fi%s' %str(i+1)])
             #set each wavelength on or off according to the dataframe
             self.filter_list[i].setChecked(bool(IS['Fi%s' %str(i+1)]))    
             
         if IS['Mod'] != 0: # not scattering mode - prevent multiple wavelengths
             self.wavelengthButtonGroup.setExclusive(True) 
             self.filterButtonGroup.setExclusive(True) 
-     
+        self.updatingGUI = False
+        
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
         if self.demo_mode: address = '/Users/Demo/'
@@ -1126,6 +1138,7 @@ class Raymond(QtWidgets.QMainWindow):
     def closeEvent(self, event): #to do upon GUI being closed
         self.frametimer.stop()
         self.saveDataFrame()
+        self.saveStagePositions()
         if not self.demo_mode:
             self.camera1.close()
             self.TLsdk.dispose()
