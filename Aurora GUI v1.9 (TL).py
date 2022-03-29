@@ -791,7 +791,7 @@ class LScontroller(QtGui.QMainWindow):
         OverallLayout.addWidget(self.DisplayGroup,                  0,2,16,7)
 
 #third column
-        OverallLayout.addWidget(self.BuilderGroup,                  0,12,6,7)
+        OverallLayout.addWidget(self.BuilderGroup,                  0,12,6,8)
         OverallLayout.addWidget(self.ZSlice,                        6,12,2,3)
         OverallLayout.addWidget(self.LambdaGroup,                   6,15,2,2)
         OverallLayout.addWidget(self.PolGroup,                      6,17,1,2)
@@ -813,7 +813,7 @@ class LScontroller(QtGui.QMainWindow):
 
     def Imaging(self, command=None):
         if self.Expt_Start_button.text() == 'Stop Experiment':
-            print 'stop button press'
+            print('stop button pressed')
             self.Expt_Start_button.setText('Stopping...')
             self.Gui_to_Thread[-1] = 'stop'
             self.ImagingLoopThread.join()

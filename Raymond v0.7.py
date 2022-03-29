@@ -204,7 +204,6 @@ class Raymond(QtWidgets.QMainWindow):
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
             i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])# get the last user
 
-        
         if self.demo_mode:
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
@@ -212,8 +211,8 @@ class Raymond(QtWidgets.QMainWindow):
             # if i == -1: i = self.FileUserList.findText('Simon')
         self.FileUserList.setCurrentIndex(i)# set user in file settings pane
         self.loadDataFrame() # load in the imaging sets
-
-        
+        # select first item in experiment builder
+ 
 # Timers
         self.frametimer = QtCore.QTimer() # A timer for grabbing images from the camera buffer during live view mode
         
@@ -285,7 +284,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetlightpower = []
         self.ISetlightpowerlabel = []
    
-        self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox('Settings')
+        self.ImagingSettingsSubGroup     = QtWidgets.QGroupBox()
         self.ImagingSettingsSubGroup.setLayout(QtWidgets.QGridLayout())
         
         for i, item in enumerate(self.filter_list):
@@ -342,11 +341,11 @@ class Raymond(QtWidgets.QMainWindow):
         self.ExptBuildGroup.setLayout(QtWidgets.QGridLayout())
         self.ExptBuildGroup.layout().addWidget(self.NewISetButton,               0,0,1,1)
         self.ExptBuildGroup.layout().addWidget(self.DelISetButton,               0,1,1,1)
-        self.ExptBuildGroup.layout().addWidget(self.ISetListWidget,              1,0,5,3)
-        self.ExptBuildGroup.layout().addWidget(self.ImagingSettingsSubGroup,     0,4,6,7)
+        self.ExptBuildGroup.layout().addWidget(self.ISetListWidget,              1,0,3,2)
+        self.ExptBuildGroup.layout().addWidget(self.ImagingSettingsSubGroup,     0,3,5,9)
         
 #~~~~~~~~~~~~~~~ Image Display ~~~~~~~~~~~~~~~  
-        self.ImageDisplayGroup              = QtWidgets.QGroupBox('Display')
+        self.ImageDisplayGroup              = QtWidgets.QGroupBox('Camera')
         self.saveImageButton                = QtGui.QPushButton("Save image")
         self.saveImageButton.released.connect(self.saveSingleImage)
         self.imagewidget                    = pg.ImageView(view=pg.PlotItem())
@@ -367,25 +366,27 @@ class Raymond(QtWidgets.QMainWindow):
         self.imagewidget.ui.roiBtn.hide()
         self.imagewidget.ui.menuBtn.hide()
 
-        self.ImageDisplayGroup.setLayout(QtGui.QGridLayout())
-        self.ImageDisplayGroup.layout().addWidget(self.view_modes[0],              0,0,1,2)
-        self.ImageDisplayGroup.layout().addWidget(self.view_modes[1],              0,2,1,2)
-        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[0],       1,0,1,2)
-        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[1],       1,2,1,2)
-        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[2],       1,4,1,2)
-        self.ImageDisplayGroup.layout().addWidget(self.saveImageButton,            0,6,1,2)
+        self.ImageDisplayGroup.setLayout(QtGui.QGridLayout())                   # (y x h w)
+        self.ImageDisplayGroup.layout().addWidget(self.view_modes[0],              0,0,1,1)
+        self.ImageDisplayGroup.layout().addWidget(self.view_modes[1],              0,1,1,1)
+        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[0],       0,5,1,1)
+        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[1],       0,6,1,1)
+        self.ImageDisplayGroup.layout().addWidget(self.view_colour_modes[2],       0,7,1,1)
+        self.ImageDisplayGroup.layout().addWidget(self.saveImageButton,            0,3,1,1)
 
-        self.ImageDisplayGroup.layout().addWidget(self.imagewidget,                2,0,10,10)
+        self.ImageDisplayGroup.layout().addWidget(self.imagewidget,                1,0,10,10)
 
 #~~~~~~~~~~~~~~~ View Finder ~~~~~~~~~~~~~~~  
         self.ViewFinderGroup            = QtWidgets.QGroupBox('Stage Map')
         self.viewFindButton             = QtGui.QPushButton("Live")
+        self.viewFindButton.setFixedWidth(60)
         self.viewFindButton.released.connect(self.showViewFinder)
         
         self.VFModButton                = QtGui.QPushButton("set BG")
         self.VFModButton.released.connect(self.update_modifier_image)
-        
+        self.VFModButton.setFixedWidth(60)
         self.tileAreaSelection          = QtGui.QComboBox()
+        self.tileAreaSelection.setFixedWidth(60)
         for item in self.tileAreaNames:
             self.tileAreaSelection.addItem(item)
         self.mapPlot = pg.PlotItem()
@@ -393,11 +394,18 @@ class Raymond(QtWidgets.QMainWindow):
 
         # proxy = pg.SignalProxy(self.mapPlot.scene().sigMouseClicked,
         #                         rateLimit=60, slot=self.on_click_event)
+        
+        self.PositionListWidget      = QtWidgets.QListWidget()
+        # self.PositionListWidget.itemClicked.connect()
+        self.PositionListWidget.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
+        self.PositionListWidget.itemEntered.connect(self.storeFromIndex)
+        self.PositionListWidget.model().rowsMoved.connect(self.ISetOrderChange)
+        
         self.mapImageWidget.getImageItem().mouseClickEvent = self.on_click_event
         
         self.mapImageWidget.ui.roiBtn.hide()
         self.mapImageWidget.ui.menuBtn.hide()
-        # self.mapImageWidget.ui.histogram.hide()
+        self.mapImageWidget.ui.histogram.hide()
         self.mapImageWidget.view.setXRange(-11, 11, padding=0)
         self.mapImageWidget.view.setYRange(-11, 11, padding=0)
         self.mapImageWidget.view.setFixedHeight(350)
@@ -405,13 +413,13 @@ class Raymond(QtWidgets.QMainWindow):
         
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
-                                                                              # (y x h w)
+        self.tileScanButton.setFixedWidth(60)                                                    # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
         self.ViewFinderGroup.layout().addWidget(self.mapImageWidget,            0,0,10,10)
-        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            11,0,1,2)
-        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               11,2,1,2)
-        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         11,4,1,3)
-        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            11,7,1,2)
+        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,11,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               1,11,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         2,11,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            3,11,1,1)
 
 #~~~~~~~~~~~~~~~ Information Pane ~~~~~~~~~~~~~~~ 
 
@@ -553,16 +561,18 @@ class Raymond(QtWidgets.QMainWindow):
         OverallLayout = QtWidgets.QGridLayout()
 #        using a 20x20 grid for flexible arrangement of the panels
 #Left-hand column                                                             # (y x h w)
-        OverallLayout.addWidget(self.ImageDisplayGroup,                         0,0,17,12)
-#Right-hand column                                                                                
-        OverallLayout.addWidget(self.ExptBuildGroup,                            0,12,6,9)
-        OverallLayout.addWidget(self.ViewFinderGroup,                           6,15,10,6)
-# bottom section        
-        OverallLayout.addWidget(self.FileGroup,                                 17,0,3,4)
-        OverallLayout.addWidget(self.TimingGroup,                               17,4,3,4)
-        OverallLayout.addWidget(self.ZSlice,                                    17,8,3,3)
-        OverallLayout.addWidget(self.ProgressGroup,                             17,11,3,3)
-        OverallLayout.addWidget(self.InfoGroup,                                 17,14,3,7)
+        OverallLayout.addWidget(self.ImageDisplayGroup,                         0,0,12,12)
+        OverallLayout.addWidget(self.ViewFinderGroup,                           12,0,8,12)
+
+#Right-hand top                                                                                
+        OverallLayout.addWidget(self.ExptBuildGroup,                            0,12,7,10)
+        
+# Right-hand bottom        
+        OverallLayout.addWidget(self.FileGroup,                                 12,12,2,3)
+        OverallLayout.addWidget(self.TimingGroup,                               12,15,2,3)
+        OverallLayout.addWidget(self.ZSlice,                                    12,18,2,3)
+        OverallLayout.addWidget(self.ProgressGroup,                             18,12,2,3)
+        OverallLayout.addWidget(self.InfoGroup,                                 18,15,2,6)
         for item in [self.ImageDisplayGroup,self.ExptBuildGroup,self.ViewFinderGroup,self.FileGroup,
                       self.ProgressGroup,self.TimingGroup,self.ZSlice,self.InfoGroup]:
             item.setFlat(True)
@@ -629,8 +639,16 @@ class Raymond(QtWidgets.QMainWindow):
         # access the dataframe
         for n in range(self.ImagingSets.shape[0]):
             IS = self.ImagingSets.loc[n]
-            print(n, IS)
-        # loop through active modes
+            if IS['Act']:                                   # loop through active modes
+                print(n, IS['Nam'])
+# #make empty master imaging set (pandas structure)
+#         imaging_set = pd.DataFrame(data=None,columns=['Name','Illumination','ND','Power','Wavelength','Polarisation',
+#                                                       'Exposure','Binning','Filter','Zposition','Znumber','Musical'])
+# #get possible sets for z,w,p
+#         lambda_set          = self.getLambda_set()
+#         pol_set             = self.getPol_set()
+#         z_set, separation   = self.getZ_set()
+#         location_set        = self.get_position_set()        
         
         # generate list of individual scans:
             # - positions           (x,y,z)
@@ -1034,7 +1052,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetExposure.setText('%s' %IS['Exp'])
         self.ISetZ.setChecked(bool(IS['Zed']))
         self.ISetMusicalN.setText('%s' %IS['Mus'])
-        print(IS['Nam'], time.time())
 # set the laser related widgets
         self.wavelengthButtonGroup.setExclusive(False)
         self.filterButtonGroup.setExclusive(False) 
@@ -1046,7 +1063,6 @@ class Raymond(QtWidgets.QMainWindow):
             self.ISetlightpowerlabel[i].setText('%s' %IS['Po%s' %str(i+1)])
             self.ISetlightpower[i].setValue(int(IS['Po%s' %str(i+1)]))
         for i, item in enumerate(self.filter_list):
-            print(i, IS['Fi%s' %str(i+1)])
             #set each wavelength on or off according to the dataframe
             self.filter_list[i].setChecked(bool(IS['Fi%s' %str(i+1)]))    
             
