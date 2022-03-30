@@ -77,6 +77,59 @@ class Raymond(QtWidgets.QMainWindow):
         self.GUI_font   = QtGui.QFont('Times',self.font_size)
         self.setFont(self.GUI_font)
         
+    # available filters and binning modes
+        self.filter_list = [
+                QtWidgets.QCheckBox("490 +-10"),
+                QtWidgets.QCheckBox("610 +-30, 650SP"),
+                QtWidgets.QCheckBox("520 +-20, 650SP"),
+                QtWidgets.QCheckBox("Pol. V"),
+                QtWidgets.QCheckBox("Pol. H"),
+                QtWidgets.QCheckBox("Empty")
+                ]
+        self.binning_list = ['1','2','4','8']
+        
+    # available imaging modalities
+        self.imaging_mode_list = ["Scattering", "Fluoresence", "MUSICAL", "SHG"]
+        
+    # available wavelengths
+        self.ISetlightsource = [
+                QtWidgets.QCheckBox('405'),
+                QtWidgets.QCheckBox('488'),
+                QtWidgets.QCheckBox('561'),
+                QtWidgets.QCheckBox('660'),
+                QtWidgets.QCheckBox('720'),
+                QtWidgets.QCheckBox('760'),
+                QtWidgets.QCheckBox('795'),
+                QtWidgets.QCheckBox('830'),
+                QtWidgets.QCheckBox('850'),
+                QtWidgets.QCheckBox('910')
+                ]
+
+    # default settings applied to new imaging set
+        self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
+              'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False,
+              'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0,
+              'Fi1':True,'Fi2':False,'Fi3':False,'Fi4':False,'Fi5':False,'Fi6':False}, index=[-1])
+        
+    # default settings applied to new stage position
+        self.newPosSet = pd.DataFrame({'ID':0,'Act':True,'X':0,'Y':0,'Z':0}, index=[-1])
+
+    # The dataframe used to hold imaging parameters for all defined imaging sets
+        self.ISmemory = "ImagingParameters.txt"
+        self.BSmemory = "Settings.txt"
+        self.PGcamSerial = '15322921'
+        
+    # Tile area options
+        self.tileAreaNames = [
+            '~5x5mm     (~2s)',
+            '~8x8mm     (~10s)',
+            '~14x14mm   (~25s)',
+            '~22x22mm   (~70s)']    
+        self.tileAreas          = [(2,1),(3,2),(5,3),(8,5)]
+        self.tileDisplayLimits  = [(2.8),(4.5),(7.0),(11.1)]
+# =============================================================================
+# End editable properties      
+# =============================================================================
         self.userList= []               # List of valid users, created at startup from list of folders in the save root directory 
         if sys.platform == "win32":
             self.demo_mode = False
@@ -92,59 +145,8 @@ class Raymond(QtWidgets.QMainWindow):
             self.userList = glob.glob('/Users/**/', recursive=False)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('/')[-2]
-        
-
-    # available filters and binning modes
-        self.filter_list = [
-                QtWidgets.QCheckBox("490 +-10"),
-                QtWidgets.QCheckBox("610 +-30, 650SP"),
-                QtWidgets.QCheckBox("520 +-20, 650SP"),
-                QtWidgets.QCheckBox("Pol. V"),
-                QtWidgets.QCheckBox("Pol. H"),
-                QtWidgets.QCheckBox("Empty")
-                ]
-        self.binning_list = ['1','2','4','8']
-    # available imaging modalities
-        self.imaging_mode_list = ["Scattering", "Fluoresence", "MUSICAL", "SHG"]
-    # available wavelengths
-        self.ISetlightsource = [
-                QtWidgets.QCheckBox('405'),
-                QtWidgets.QCheckBox('488'),
-                QtWidgets.QCheckBox('561'),
-                QtWidgets.QCheckBox('660'),
-                QtWidgets.QCheckBox('720'),
-                QtWidgets.QCheckBox('760'),
-                QtWidgets.QCheckBox('795'),
-                QtWidgets.QCheckBox('830'),
-                QtWidgets.QCheckBox('850'),
-                QtWidgets.QCheckBox('910')
-                ]
-        
-        
-        
-    # default settings applied to new imaging set
-        self.newSet = pd.DataFrame({'ID':0,'Act':False,'Nam':'name','Exp':10,'Bin':0,'Mod':0,'Mus':0,'Zed':True,
-              'Wa1':True,'Wa2':False,'Wa3':False,'Wa4':False,'Wa5':False,'Wa6':False,'Wa7':False,'Wa8':False,'Wa9':False,'Wa10':False,
-              'Po1':0,'Po2':0,'Po3':0,'Po4':0,'Po5':0,'Po6':0,'Po7':0,'Po8':0,'Po9':0,'Po10':0,
-              'Fi1':True,'Fi2':False,'Fi3':False,'Fi4':False,'Fi5':False,'Fi6':False}, index=[-1])
-    # basic properties for the UI
-        
-    # The dataframe used to hold imaging parameters for all defined imaging sets
-        self.ISmemory = "ImagingParameters.txt"
-        self.BSmemory = "Settings.txt"
-        self.PGcamSerial = '15322921'
-    # Tile area options
-        self.tileAreaNames = [
-            '~5x5mm     (~2s)',
-            '~8x8mm     (~10s)',
-            '~14x14mm   (~25s)',
-            '~22x22mm   (~70s)']    
-        self.tileAreas          = [(2,1),(3,2),(5,3),(8,5)]
-        self.tileDisplayLimits  = [(2.8),(4.5),(7.0),(11.1)]
-# =============================================================================
-# End editable properties      
-# =============================================================================
-        
+                
+                
         self.window_title = os.path.basename(__file__)
         self.ListWidgetfromIndex = 0    # keeps track of the last clicked item in imaging set list widget
         self.liveImaging = False        # Keeps track of if microsocpe is currently streaming from the camera
@@ -173,6 +175,8 @@ class Raymond(QtWidgets.QMainWindow):
 # Data Structures
 # =============================================================================
 
+        self.ImagingSets = pd.DataFrame()   #Stores al imaging settings, populated from file stored in user folder
+        self.PositionList = pd.DataFrame()  #Stores user selected stage positions, can also be loaded from a file (in case of crash)
 
 # ~~~~~~~~~~~~~~~end~~~~~~~~~~~~~~
 
@@ -395,11 +399,23 @@ class Raymond(QtWidgets.QMainWindow):
         # proxy = pg.SignalProxy(self.mapPlot.scene().sigMouseClicked,
         #                         rateLimit=60, slot=self.on_click_event)
         
-        self.PositionListWidget      = QtWidgets.QListWidget()
+        self.NewPButton       = QtWidgets.QPushButton('+')
+        self.DelPButton       = QtWidgets.QPushButton('-')
+        self.LoadPButton      = QtWidgets.QPushButton('Load')
+        self.NewPButton.released.connect(lambda: self.addPos())
+        self.DelPButton.released.connect(lambda: self.deletePos())
+        self.LoadPButton.released.connect(self.loadPositions)
+        self.PositionListWidget      = QtWidgets.QTableWidget()
         # self.PositionListWidget.itemClicked.connect()
         self.PositionListWidget.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
-        self.PositionListWidget.itemEntered.connect(self.storeFromIndex)
-        self.PositionListWidget.model().rowsMoved.connect(self.ISetOrderChange)
+        self.PositionListWidget.itemEntered.connect(self.storeFromIndexP)
+        self.PositionListWidget.cellDoubleClicked.connect(self.pos_table_click)
+        self.PositionListWidget.setColumnCount(6)
+        self.PositionListWidget.setHorizontalHeaderLabels([self.tr("P"),self.tr("X"),self.tr("Y"),self.tr("Z"),self.tr(""),self.tr("")])
+        pos_column_spacing = [25,45,45,45,30,20]
+        for column in range(6):
+            self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
+        self.PositionListWidget.setFixedWidth(230)
         
         self.mapImageWidget.getImageItem().mouseClickEvent = self.on_click_event
         
@@ -413,13 +429,17 @@ class Raymond(QtWidgets.QMainWindow):
         
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
-        self.tileScanButton.setFixedWidth(60)                                                    # (y x h w)
+        self.tileScanButton.setFixedWidth(60)                                 # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
-        self.ViewFinderGroup.layout().addWidget(self.mapImageWidget,            0,0,10,10)
-        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,11,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               1,11,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         2,11,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            3,11,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.mapImageWidget,            0,0,10,6)
+        self.ViewFinderGroup.layout().addWidget(self.PositionListWidget,        2,6,8,4)
+        self.ViewFinderGroup.layout().addWidget(self.NewPButton,                1,6,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.DelPButton,                1,7,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.LoadPButton,               1,8,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,6,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               0,7,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         0,8,1,2)
+        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            0,9,1,1)
 
 #~~~~~~~~~~~~~~~ Information Pane ~~~~~~~~~~~~~~~ 
 
@@ -936,6 +956,64 @@ class Raymond(QtWidgets.QMainWindow):
         except:
             self.information("Please enter valid interval and loop values.", 'y')
             
+# =============================================================================
+#  Stage Position List functions
+# =============================================================================
+    def addPos(self, position=None, in_use=None):
+        if position == None:
+            position = [0,0,0]
+        # add a new stage position to the bottom of the list Widget,
+        # self.PositionListWidget.insertItem(self.PositionListWidget.count(), str(self.PositionListWidget.count()))
+        row_number = self.PositionListWidget.rowCount()
+        self.PositionListWidget.insertRow(row_number)
+        self.PositionListWidget.setRowHeight(row_number, 15)
+        inUse = QtGui.QCheckBox('')
+        if in_use is not None:
+            inUse.setChecked(in_use)
+        else:
+            inUse.setChecked(True)
+        X = QtGui.QLineEdit()
+        X.setText('%s' %position[0])
+        # X.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[0][1],self.ASI.imaging_limits[0][0],1))
+        Y = QtGui.QLineEdit()
+        Y.setText('%s' %position[1])
+        # Y.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[1][1],self.ASI.imaging_limits[1][0],1))
+        Z = QtGui.QLineEdit()
+        Z.setText('%s' %position[2])
+        # Z.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[2][1],self.ASI.imaging_limits[2][0],1))
+        del_ = QtGui.QLabel('Delete')
+        goto = QtGui.QLabel('Go')
+
+        self.PositionListWidget.setCellWidget(row_number,  0, inUse)
+        self.PositionListWidget.setCellWidget(row_number,  1, X)
+        self.PositionListWidget.setCellWidget(row_number,  2, Y)
+        self.PositionListWidget.setCellWidget(row_number,  3, Z)
+        self.PositionListWidget.setCellWidget(row_number,  4, del_)
+        self.PositionListWidget.setCellWidget(row_number,  5, goto)
+
+    def pos_table_click(self, r,c):
+        if c == 4: # delete
+            self.PositionListWidget.removeRow(r)
+        if c == 5: # go to
+            x     = float(self.PositionListWidget.cellWidget(r,1).text())
+            y     = float(self.PositionListWidget.cellWidget(r,2).text())
+            z    = float(self.PositionListWidget.cellWidget(r,3).text())
+            print('move stage to position (x:%s, y:%s, z:%s)' %(x,y,z))
+                   
+    def deletePos(self):
+        d = self.PositionListWidget.currentRow()
+        #delete from widget
+        self.PositionListWidget.removeRow(d)
+    
+    def storeFromIndexP(self): #store index of last clicked iten in the list view
+        self.PosListWidgetfromIndex = self.PositionListWidget.currentRow()
+
+    def Pos_to_dataframe(self):
+        pass
+    
+    def loadPositions(self):
+        pass
+    
 # =============================================================================
 #  Experiment Builder functions
 # =============================================================================
