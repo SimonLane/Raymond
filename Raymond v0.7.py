@@ -24,7 +24,11 @@ v0.3
         Add GUI section for Rayleigh image processing options
         Add GUI section for locations, and button to load in saved locations
         Load calibration file for laser powers
-
+        
+        On start Expt. output a file (to the experiment directory) with all the imaging parameters and stage positions as an excel file
+        Ability to load back the settings and/or positions
+        
+        
 @author: Simon
 """
 
@@ -117,6 +121,7 @@ class Raymond(QtWidgets.QMainWindow):
     # The dataframe used to hold imaging parameters for all defined imaging sets
         self.ISmemory = "ImagingParameters.txt"
         self.BSmemory = "Settings.txt"
+        # self.stagePositions = 'lastStagePositions.xlsx'
         self.PGcamSerial = '15322921'
         
     # Tile area options
@@ -219,6 +224,7 @@ class Raymond(QtWidgets.QMainWindow):
  
 # Timers
         self.frametimer = QtCore.QTimer() # A timer for grabbing images from the camera buffer during live view mode
+        self.update_expt_name()
         
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                #Setup Application Window
@@ -406,8 +412,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.DelPButton.released.connect(lambda: self.deletePos())
         self.LoadPButton.released.connect(self.loadPositions)
         self.PositionListWidget      = QtWidgets.QTableWidget()
-        # self.PositionListWidget.itemClicked.connect()
-        self.PositionListWidget.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.PositionListWidget.itemEntered.connect(self.storeFromIndexP)
         self.PositionListWidget.cellDoubleClicked.connect(self.pos_table_click)
         self.PositionListWidget.setColumnCount(6)
@@ -442,7 +446,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            0,9,1,1)
 
 #~~~~~~~~~~~~~~~ Information Pane ~~~~~~~~~~~~~~~ 
-
         self.Information_text_window = QtGui.QTextEdit()
         self.Information_text_window.setReadOnly(True)
         self.Information_text_window.setStyleSheet("background-color: rgb(75,75,75);")
@@ -482,11 +485,9 @@ class Raymond(QtWidgets.QMainWindow):
 
 #~~~~~~~~~~~~~~~ File save Pane ~~~~~~~~~~~~~~~ 
 #Fileing Widgets
-
         self.FileUserLabel                  = QtGui.QLabel('User:')
         self.FileUserList                   = QtGui.QComboBox()
 #generate user list
-        
         for item in self.userList:
             if not item.__contains__('.') and len(item) < 15:
                 self.FileUserList.addItem(item)
@@ -514,7 +515,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.FileGroup.layout().addWidget(self.eightCheckbox,                   3,2,1,2)        
 
 #~~~~~~~~~~~~~~~ Timing Pane ~~~~~~~~~~~~~~~ 
-
 #timing widgets
         self.TimingLabel1                   = QtGui.QLabel('No. Loops:')
         self.TimingLoops                    = QtGui.QLineEdit('1')
@@ -545,7 +545,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.TimingGroup.layout().addWidget(self.TimingDuration,                2,1,1,1)
     
 #~~~~~~~~~~~~~~~ Z-stack Pane ~~~~~~~~~~~~~~~ 
-        
         self.ZLabel1                    = QtGui.QLabel('Slices:')
         self.ZSlices                    = QtGui.QLineEdit('11')
         self.ZLabel2                    = QtGui.QLabel('Separation:')
@@ -588,9 +587,9 @@ class Raymond(QtWidgets.QMainWindow):
         OverallLayout.addWidget(self.ExptBuildGroup,                            0,12,7,10)
         
 # Right-hand bottom        
-        OverallLayout.addWidget(self.FileGroup,                                 12,12,2,3)
-        OverallLayout.addWidget(self.TimingGroup,                               12,15,2,3)
-        OverallLayout.addWidget(self.ZSlice,                                    12,18,2,3)
+        OverallLayout.addWidget(self.FileGroup,                                 15,12,2,3)
+        OverallLayout.addWidget(self.TimingGroup,                               15,15,2,3)
+        OverallLayout.addWidget(self.ZSlice,                                    15,18,2,3)
         OverallLayout.addWidget(self.ProgressGroup,                             18,12,2,3)
         OverallLayout.addWidget(self.InfoGroup,                                 18,15,2,6)
         for item in [self.ImageDisplayGroup,self.ExptBuildGroup,self.ViewFinderGroup,self.FileGroup,
@@ -617,15 +616,21 @@ class Raymond(QtWidgets.QMainWindow):
 #            self.ImagingLoopThread.join()
             
         if self.Expt_Start_button.text() == 'Start Experiment':
-            #save all settings and positions in case of crash whilst imaging
+# save all settings and positions in case of crash whilst imaging
             self.saveDataFrame()
-            #ToDo - switch to using a pandas table
-            self.saveStagePositions()
-            imaging_set = self.build_imaging_set() 
+            if self.positionList.shape[0] == 0: 
+                self.information('Imaging not possible, no stage positions selected', 'r')
+                return
+            self.positionsToDisk()
+            imaging_set = self.build_imaging_set()
+            if imaging_set.shape[0] == 0:
+                self.information('Imaging not possible, no imaging modes selected', 'r')
+                return
             timing_interval = int(self.TimingInterval.text())
             imaging_loops = int(self.TimingLoops.text())
             crop = self.cropCheckbox.isChecked()
             eight = self.eightCheckbox.isChecked()
+            
 # test for disk space (in Gb)
             if not self.demo_mode:
                 req_space = round((imaging_set[imaging_set.Binning == 0].shape[0]*0.008193) + 
@@ -661,9 +666,9 @@ class Raymond(QtWidgets.QMainWindow):
             IS = self.ImagingSets.loc[n]
             if IS['Act']:                                   # loop through active modes
                 print(n, IS['Nam'])
-# #make empty master imaging set (pandas structure)
-#         imaging_set = pd.DataFrame(data=None,columns=['Name','Illumination','ND','Power','Wavelength','Polarisation',
-#                                                       'Exposure','Binning','Filter','Zposition','Znumber','Musical'])
+#make empty master imaging set (pandas structure)
+        imaging_set = pd.DataFrame(data=None,columns=['Name','Illumination','ND','Power','Wavelength','Polarisation',
+                                                       'Exposure','Binning','Filter','Zposition','Znumber','Musical'])
 # #get possible sets for z,w,p
 #         lambda_set          = self.getLambda_set()
 #         pol_set             = self.getPol_set()
@@ -827,10 +832,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
                     levels=(15,240), scale=(1/231,1/231), 
                     pos=(-11.9,-11.6), autoRange=False)
-            
-    def saveStagePositions(self):
-        pass
-         
+
 # =============================================================================
 #  Image Display Functions
 # =============================================================================
@@ -959,7 +961,7 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Stage Position List functions
 # =============================================================================
-    def addPos(self, position=None, in_use=None):
+    def addPos(self, position=None, in_use=True, update=True):
         if position == None:
             position = [0,0,0]
         # add a new stage position to the bottom of the list Widget,
@@ -968,19 +970,20 @@ class Raymond(QtWidgets.QMainWindow):
         self.PositionListWidget.insertRow(row_number)
         self.PositionListWidget.setRowHeight(row_number, 15)
         inUse = QtGui.QCheckBox('')
-        if in_use is not None:
-            inUse.setChecked(in_use)
-        else:
-            inUse.setChecked(True)
+        inUse.setChecked(bool(in_use))
+        inUse.stateChanged.connect(self.positionsToDataframe)
         X = QtGui.QLineEdit()
         X.setText('%s' %position[0])
         # X.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[0][1],self.ASI.imaging_limits[0][0],1))
+        X.textChanged.connect(self.positionsToDataframe)
         Y = QtGui.QLineEdit()
         Y.setText('%s' %position[1])
         # Y.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[1][1],self.ASI.imaging_limits[1][0],1))
+        Y.textChanged.connect(self.positionsToDataframe)
         Z = QtGui.QLineEdit()
         Z.setText('%s' %position[2])
         # Z.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[2][1],self.ASI.imaging_limits[2][0],1))
+        Z.textChanged.connect(self.positionsToDataframe)
         del_ = QtGui.QLabel('Delete')
         goto = QtGui.QLabel('Go')
 
@@ -990,10 +993,12 @@ class Raymond(QtWidgets.QMainWindow):
         self.PositionListWidget.setCellWidget(row_number,  3, Z)
         self.PositionListWidget.setCellWidget(row_number,  4, del_)
         self.PositionListWidget.setCellWidget(row_number,  5, goto)
+        if update: self.positionsToDataframe()
 
     def pos_table_click(self, r,c):
         if c == 4: # delete
             self.PositionListWidget.removeRow(r)
+            self.positionsToDataframe()
         if c == 5: # go to
             x     = float(self.PositionListWidget.cellWidget(r,1).text())
             y     = float(self.PositionListWidget.cellWidget(r,2).text())
@@ -1002,22 +1007,38 @@ class Raymond(QtWidgets.QMainWindow):
                    
     def deletePos(self):
         d = self.PositionListWidget.currentRow()
-        #delete from widget
         self.PositionListWidget.removeRow(d)
+        self.positionsToDataframe()
     
     def storeFromIndexP(self): #store index of last clicked iten in the list view
         self.PosListWidgetfromIndex = self.PositionListWidget.currentRow()
 
-    def Pos_to_dataframe(self):
-        pass
+    def positionsToDataframe(self):
+        self.PositionList = self.PositionList.iloc[0:0]
+        for r in range(self.PositionListWidget.rowCount()):
+            self.PositionList.at[r,'Act']    = self.PositionListWidget.cellWidget(r,0).isChecked()
+            self.PositionList.at[r,'X']      = float(self.PositionListWidget.cellWidget(r,1).text())
+            self.PositionList.at[r,'Y']      = float(self.PositionListWidget.cellWidget(r,2).text())
+            self.PositionList.at[r,'Z']      = float(self.PositionListWidget.cellWidget(r,3).text())
+        self.positionsToDisk()
+        
     
+    def positionsToDisk(self):
+        if self.positionList.shape[0] != 0:
+            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], columns=['Act','X','Y','Z'])
+        
     def loadPositions(self):
-        pass
-    
+        address = QtGui.QFileDialog.getOpenFileName(self, 'Select Position Storage File', self.BasicSettings.at[0,'LastUserAddress'],
+                                                    "All files (lastStagePositions.xlsx stagePositions.xlsx)")
+        self.PositionList = pd.read_excel(address[0], index_col=0)
+        for r in range(self.PositionList.shape[0]):
+            i = self.PositionList.at[r,'Act']
+            p = [self.PositionList.at[r,'X'],self.PositionList.at[r,'Y'],self.PositionList.at[r,'Z']]
+            self.addPos(position=p, in_use=i, update=False)
+        
 # =============================================================================
 #  Experiment Builder functions
 # =============================================================================
-
     def addISet(self):
         # add a new Iset to the top of the list Widget,
         self.ISetListWidget.insertItem(0, str(self.ISetListWidget.count()))
@@ -1202,6 +1223,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.saveDataFrame()
             self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
             self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
+            if self.demo_mode: self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
             self.loadDataFrame()
         self.ExptName    = self.FileExptName.text()
         startdate   = datetime.date.today()
@@ -1212,14 +1234,21 @@ class Raymond(QtWidgets.QMainWindow):
             i=i+1
             if i==1:
                 self.StoreLocation = '%s\\%s\\%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
+                if self.demo_mode: self.StoreLocation = '/%s/%s/%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
             else:
                 self.StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
+                if self.demo_mode: self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
             if not os.path.exists(self.StoreLocation):
+                self.StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
+                if self.demo_mode: self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
                 self.FileAddress.setText(self.StoreLocation)
                 break
+        
         self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
+        if self.demo_mode: self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
         self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
         self.BasicSettings.to_csv(self.BSmemory, mode='w', index=True)
+            
 # =============================================================================
 #  Minor functions
 # =============================================================================
