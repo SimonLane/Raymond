@@ -547,9 +547,9 @@ class Raymond(QtWidgets.QMainWindow):
 #~~~~~~~~~~~~~~~ Z-stack Pane ~~~~~~~~~~~~~~~ 
         self.ZLabel1                    = QtGui.QLabel('Slices:')
         self.ZSlices                    = QtGui.QLineEdit('11')
-        self.ZLabel2                    = QtGui.QLabel('Separation:')
+        self.ZLabel2                    = QtGui.QLabel('Separation (µm):')
         self.ZSeparation                = QtGui.QLineEdit('10')
-        self.ZLabel3                    = QtGui.QLabel('Span:')
+        self.ZLabel3                    = QtGui.QLabel('Span (µm):')
         self.ZSpan                      = QtGui.QLineEdit('100')
         self.ZSlices.setValidator(QtGui.QIntValidator(1,1000))
         self.ZSeparation.setValidator(QtGui.QIntValidator(1,100))
@@ -587,9 +587,9 @@ class Raymond(QtWidgets.QMainWindow):
         OverallLayout.addWidget(self.ExptBuildGroup,                            0,12,7,10)
         
 # Right-hand bottom        
-        OverallLayout.addWidget(self.FileGroup,                                 15,12,2,3)
-        OverallLayout.addWidget(self.TimingGroup,                               15,15,2,3)
-        OverallLayout.addWidget(self.ZSlice,                                    15,18,2,3)
+        OverallLayout.addWidget(self.FileGroup,                                 16,12,2,3)
+        OverallLayout.addWidget(self.TimingGroup,                               16,15,2,3)
+        OverallLayout.addWidget(self.ZSlice,                                    16,18,2,3)
         OverallLayout.addWidget(self.ProgressGroup,                             18,12,2,3)
         OverallLayout.addWidget(self.InfoGroup,                                 18,15,2,6)
         for item in [self.ImageDisplayGroup,self.ExptBuildGroup,self.ViewFinderGroup,self.FileGroup,
@@ -661,14 +661,22 @@ class Raymond(QtWidgets.QMainWindow):
     # Send to Control board
     
     def build_imaging_set(self):
-        # access the dataframe
+        
+        
+#make empty master imaging set (pandas structure)
+        imaging_set = pd.DataFrame(data=None,columns=[
+            'Name','Power','Wavelength','Polarisation',
+            'Exposure','Binning','Filter','Zstart','Znumber','Zseparation'])
+# access the dataframe
         for n in range(self.ImagingSets.shape[0]):
             IS = self.ImagingSets.loc[n]
             if IS['Act']:                                   # loop through active modes
-                print(n, IS['Nam'])
-#make empty master imaging set (pandas structure)
-        imaging_set = pd.DataFrame(data=None,columns=['Name','Illumination','ND','Power','Wavelength','Polarisation',
-                                                       'Exposure','Binning','Filter','Zposition','Znumber','Musical'])
+                print(n, IS['Nam'])     
+                imaging_set 
+
+
+
+                                         
 # #get possible sets for z,w,p
 #         lambda_set          = self.getLambda_set()
 #         pol_set             = self.getPol_set()
@@ -957,7 +965,46 @@ class Raymond(QtWidgets.QMainWindow):
 
         except:
             self.information("Please enter valid interval and loop values.", 'y')
-            
+
+# =============================================================================
+# Z-stack functions            
+# =============================================================================
+    def adjustZStack(self, m):
+        span            = float(self.ZSpan.text())
+        slices          = int(self.ZSlices.text())
+        separation      = float(self.ZSeparation.text())
+
+        if m==1:
+            self.ZSlices.setText(str(int(round(span/separation))+1))
+            self.adjustZStack(0)
+        elif m==0:
+            self.ZSeparation.setText(str(round((span/(slices-1)),2)))
+        elif m==2:
+            self.adjustZStack(0)
+        zs = self.show_set(self.getZ_set()[0])
+        self.ZDemo.setText('[%s] n=%s' %(zs,len(self.getZ_set()[0])))
+    
+    def show_set(self, a_set):
+#        to output a representation of a lambda, polorisation or z range to allow user to confirm settings are correct
+        string = ''
+        if len(a_set) < 7:
+            for item in a_set:
+                string = string + ',%s' %item
+        else:
+            for item in a_set[0:3]: string = string + ',%s' %item
+            string = string + ', ... ' 
+            for item in a_set[-3:]: string = string + ',%s' %item
+        return '%s' %(string[1:])
+    
+    def getZ_set(self):
+        span = float(self.ZSpan.text())
+        slices = int(self.ZSlices.text())
+        separation = float(round((span/(slices-1)),2))
+        z_set = []
+        for i in range(slices):
+            z_set.append(round(((span/2)-span) + (separation * i),2))
+        return z_set, separation
+
 # =============================================================================
 #  Stage Position List functions
 # =============================================================================
