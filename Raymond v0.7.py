@@ -74,6 +74,8 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Microscope properties - edit as needed
 # =============================================================================
+        self.demo_mode = True # If true loads GUI without connecting to any hardware, for development only
+
     # GUI appearance
         self.font_size = 9
         self.border_size = 1
@@ -137,20 +139,19 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
         self.userList= []               # List of valid users, created at startup from list of folders in the save root directory 
         if sys.platform == "win32":
-            self.demo_mode = False
             self.user_directory = 'D:'
             self.userList = glob.glob('D:\\**\\', recursive=False)
-            print(self.userList)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('\\')[-2]
         if sys.platform == "darwin":  
             self.demo_mode = True
-            print('OS: ', sys.platform)
             self.user_directory = 'Users'
             self.userList = glob.glob('/Users/**/', recursive=False)
             for i, item in enumerate(self.userList):
                 self.userList[i] = item.split('/')[-2]
-                
+        print('OS: ', sys.platform)
+        print('Demo mode: ', self.demo_mode)
+        print('User list: ', self.userList)        
                 
         self.window_title = os.path.basename(__file__)
         self.ListWidgetfromIndex = 0    # keeps track of the last clicked item in imaging set list widget
@@ -217,7 +218,6 @@ class Raymond(QtWidgets.QMainWindow):
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
             i = self.FileUserList.findText('Demo')# force last user to Demo in demo mode
-            # if i == -1: i = self.FileUserList.findText('Simon')
         self.FileUserList.setCurrentIndex(i)# set user in file settings pane
         self.loadDataFrame() # load in the imaging sets
         # select first item in experiment builder
@@ -265,7 +265,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.ISetMode.addItems(self.imaging_mode_list)
         self.ISetMode.currentIndexChanged.connect(self.GUI_to_dataframe)
         
-        self.FilterLabel         = QtWidgets.QLabel('Filter:')
+        self.FilterLabel         = QtWidgets.QLabel('Filter(s):')
         self.filterButtonGroup = QtWidgets.QButtonGroup()
         
         self.BinningLabel        = QtWidgets.QLabel('Binning:')
@@ -288,7 +288,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.LiveButton.pressed.connect(self.liveView)
         self.GrabButton          = QtWidgets.QPushButton('Grab')
         self.GrabButton.pressed.connect(self.grabFrame)
-        self.LightsourceLabel    = QtWidgets.QLabel('Wavelengths:')
+        self.LightsourceLabel    = QtWidgets.QLabel('Wavelength(s):')
         self.wavelengthButtonGroup = QtWidgets.QButtonGroup()
 
         self.ISetlightpower = []
@@ -300,7 +300,7 @@ class Raymond(QtWidgets.QMainWindow):
         for i, item in enumerate(self.filter_list):
             self.filterButtonGroup.addButton(item)
             item.stateChanged.connect(self.GUI_to_dataframe)
-            self.ImagingSettingsSubGroup.layout().addWidget(self.filter_list[i],        i+3,1,1,1)
+            self.ImagingSettingsSubGroup.layout().addWidget(self.filter_list[i],        i+2,1,1,1)
         self.filterButtonGroup.setExclusive(True)
         
         for i, item in enumerate(self.ISetlightsource):
@@ -327,13 +327,13 @@ class Raymond(QtWidgets.QMainWindow):
         self.wavelengthButtonGroup.setExclusive(True)
 
     # sub-assembly                                                                # (y x h w)    
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetActive,            0,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetActive,            0,4,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetZ,                 0,2,1,2)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.NameLabel,             1,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetName,              1,1,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ModeLabel,             2,0,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMode,              2,1,1,1)
-        self.ImagingSettingsSubGroup.layout().addWidget(self.FilterLabel,           3,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.NameLabel,             0,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetName,              0,1,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ModeLabel,             1,0,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.ISetMode,              1,1,1,1)
+        self.ImagingSettingsSubGroup.layout().addWidget(self.FilterLabel,           2,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.BinningLabel,          8,0,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ISetBinning,           8,1,1,1)
         self.ImagingSettingsSubGroup.layout().addWidget(self.ExposureLabel,         9,0,1,1)
@@ -462,7 +462,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.progress_c          = QtGui.QProgressBar()
         self.progress_c.setFixedHeight(10)
         self.progress_c.setFixedWidth(200)
-
         self.progress_z          = QtGui.QProgressBar()
         self.progress_p          = QtGui.QProgressBar()
         self.progress_t          = QtGui.QProgressBar()
@@ -491,7 +490,6 @@ class Raymond(QtWidgets.QMainWindow):
         for item in self.userList:
             if not item.__contains__('.') and len(item) < 15:
                 self.FileUserList.addItem(item)
-                print(item)
         self.FileExptNameLabel              = QtGui.QLabel('Expt. Name:')
         self.FileExptName                   = QtGui.QLineEdit('')
         self.FileExptName.returnPressed.connect(self.update_expt_name)
@@ -618,11 +616,12 @@ class Raymond(QtWidgets.QMainWindow):
         if self.Expt_Start_button.text() == 'Start Experiment':
 # save all settings and positions in case of crash whilst imaging
             self.saveDataFrame()
-            if self.positionList.shape[0] == 0: 
+            if self.PositionList.shape[0] == 0: 
                 self.information('Imaging not possible, no stage positions selected', 'r')
                 return
             self.positionsToDisk()
             imaging_set = self.build_imaging_set()
+            print(imaging_set)
             if imaging_set.shape[0] == 0:
                 self.information('Imaging not possible, no imaging modes selected', 'r')
                 return
@@ -652,7 +651,7 @@ class Raymond(QtWidgets.QMainWindow):
 #            Visible lasers
 #            NIR lasers
 #            SLM
-
+            print('starting expt')
             self.Expt_Start_button.setText('Stop Experiment')
     # Start job in a new thread
     
@@ -664,16 +663,35 @@ class Raymond(QtWidgets.QMainWindow):
         
         
 #make empty master imaging set (pandas structure)
-        imaging_set = pd.DataFrame(data=None,columns=[
+        imaging_sets = pd.DataFrame(data=None,columns=[
             'Name','Power','Wavelength','Polarisation',
             'Exposure','Binning','Filter','Zstart','Znumber','Zseparation'])
+
 # access the dataframe
         for n in range(self.ImagingSets.shape[0]):
             IS = self.ImagingSets.loc[n]
-            if IS['Act']:                                   # loop through active modes
-                print(n, IS['Nam'])     
-                imaging_set 
+            if IS['Act']: 
+                name      = IS['Nam']
+                exposure  = IS['Exp']
+                binning   = IS['Bin']                                  # loop through active modes
+                for f in range(1,7,1): 
+                    if IS['Fi%s' %f]:
+                        filter_ = f
+                        for w in range(1,11,1):
+                            if IS['Wa%s' %w]:
+                                wavelength = w
+                                power      = IS['Po%s' %w]
+                            
+                                print(name, 'filter:', filter_, 'wavelength:', 
+                                      wavelength, 'power:', power)
 
+                znumber         = int(self.ZSlices.text())
+                zseparation     = float(self.ZSeparation.text())
+                zstart          = (znumber * zseparation)/-2.0
+                
+                
+                # imaging_sets.append(set_, ignore_index=False)
+        
 
 
                                          
@@ -689,29 +707,36 @@ class Raymond(QtWidgets.QMainWindow):
             # - lambda              ()
             
         # sort according to user selection
-    
+        return imaging_set
 # =============================================================================
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
     def Imaging_loop(self, imaging_set):
-        timepoints  = [0]
-        positions   = [0]
-        channels    = [0]
-        z_slices    = [0]
-        wavelengths = [0]
+        timepoints  = [0,1,2,3,4]
+        positions   = [0,1,2,3,4]
+        channels    = [0,1,2,3,4]
+        z_slices    = [0,1,2,3,4]
+        wavelengths = [0,1,2,3,4]
         
         
         for t in timepoints:
-#            Timing gate
+            self.progress('t',t,len(timepoints))
             for p in positions:
 #                Stage positioning gate
+                self.progress('p',p,len(positions))
                 for c in channels:
+                    self.progress('c',c,len(channels))
                     for z in z_slices:
-                        for w in wavelengths:
-                            time.sleep(0.3)
+                        self.progress('z',z,len(z_slices))
+
+                        time.sleep(0.1)
 
 
-
+    def progress(self, bar, a,b):
+        if bar == 't': self.progress_t.setValue(int(float(a)/float(b)))
+        if bar == 'p': self.progress_p.setValue(int(float(a)/float(b)))
+        if bar == 'c': self.progress_c.setValue(int(float(a)/float(b)))
+        if bar == 'z': self.progress_z.setValue(int(float(a)/float(b)))
 # =============================================================================
 #   ViewFinder functions
 # =============================================================================
@@ -928,7 +953,7 @@ class Raymond(QtWidgets.QMainWindow):
             
         # TO DO - wait for signal that all hardware finished moving
         self.camera1.grab_mode()
-        time.sleep(self.camera1.frame_time()/1000.0)
+        time.sleep(self.camera1.frame_time()/1000000.0)
         self.grabImageFromCameraBuffer()
         self.camera1.stop_live()
         
@@ -1071,7 +1096,7 @@ class Raymond(QtWidgets.QMainWindow):
         
     
     def positionsToDisk(self):
-        if self.positionList.shape[0] != 0:
+        if self.PositionList.shape[0] != 0:
             self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], columns=['Act','X','Y','Z'])
         
     def loadPositions(self):
@@ -1219,7 +1244,7 @@ class Raymond(QtWidgets.QMainWindow):
         
     def loadDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
-        if self.demo_mode: address = '/Users/Demo/'
+        if sys.platform == "darwin": address = '/Users/Demo/'
         self.ImagingSets = pd.read_table("%sImagingParameters.txt" %(address), index_col=0)
         # build the imaging set list widget
         self.ISetListWidget.clear()
@@ -1243,7 +1268,7 @@ class Raymond(QtWidgets.QMainWindow):
   
     def saveDataFrame(self):
         address = self.BasicSettings.at[0,'LastUserAddress']
-        if self.demo_mode: address = '/Users/Demo/'
+        if sys.platform == "darwin": address = '/Users/Demo/'
         self.ImagingSets.to_csv("%sImagingParameters.txt" %(address), mode='w', index=True, sep ='\t')
         
 # =============================================================================
@@ -1270,7 +1295,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.saveDataFrame()
             self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
             self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
-            if self.demo_mode: self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
+            if sys.platform == "darwin": self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
             self.loadDataFrame()
         self.ExptName    = self.FileExptName.text()
         startdate   = datetime.date.today()
@@ -1281,18 +1306,18 @@ class Raymond(QtWidgets.QMainWindow):
             i=i+1
             if i==1:
                 self.StoreLocation = '%s\\%s\\%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
-                if self.demo_mode: self.StoreLocation = '/%s/%s/%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
+                if sys.platform == "darwin": self.StoreLocation = '/%s/%s/%s%s' %(self.user_directory,self.UserName,startdate,self.ExptName)
             else:
                 self.StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
-                if self.demo_mode: self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
+                if sys.platform == "darwin": self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
             if not os.path.exists(self.StoreLocation):
                 self.StoreLocation = '%s\\%s\\%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
-                if self.demo_mode: self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
+                if sys.platform == "darwin": self.StoreLocation = '/%s/%s/%s (%s)%s' %(self.user_directory,self.UserName,startdate,i,self.ExptName)
                 self.FileAddress.setText(self.StoreLocation)
                 break
         
         self.BasicSettings.at[0,'LastUserAddress'] ="%s\\%s\\" %(self.user_directory,self.UserName)
-        if self.demo_mode: self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
+        if sys.platform == "darwin": self.BasicSettings.at[0,'LastUserAddress'] ="/%s/%s/" %(self.user_directory,self.UserName)
         self.BasicSettings.at[0,'LastUser'] ="%s" %(self.UserName)
         self.BasicSettings.to_csv(self.BSmemory, mode='w', index=True)
             
@@ -1308,7 +1333,7 @@ class Raymond(QtWidgets.QMainWindow):
     def closeEvent(self, event): #to do upon GUI being closed
         self.frametimer.stop()
         self.saveDataFrame()
-        self.saveStagePositions()
+        self.positionsToDisk()
         if not self.demo_mode:
             self.camera1.close()
             self.TLsdk.dispose()
