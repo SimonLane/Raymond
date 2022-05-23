@@ -621,7 +621,9 @@ class Raymond(QtWidgets.QMainWindow):
                 return
             self.positionsToDisk()
             imaging_set = self.build_imaging_set()
-            print(imaging_set)
+            position_set = self.build_position_set()
+            #print(imaging_set)
+            print(position_set)
             if imaging_set.shape[0] == 0:
                 self.information('Imaging not possible, no imaging modes selected', 'r')
                 return
@@ -654,18 +656,31 @@ class Raymond(QtWidgets.QMainWindow):
             print('starting expt')
             self.Expt_Start_button.setText('Stop Experiment')
     # Start job in a new thread
-    
+            self.ImagingLoopThread = threading.Thread(target=self.Imaging_thread, 
+                name="imaging",args=(imaging_set, self.working_folder, 
+                                     timing_interval, imaging_loops, positions,
+                                     crop, eight))
+            
+            self.in_experiment = True
+            
+            self.Gui_to_Thread[-1]=''
+
+            self.ImagingLoopThread.start()
     # Start threadsafe timers and queues to handle data flow and GUI updates
     
-    # Send to Control board
-    
+
+    def build_position_set(self):
+        pass
+        
+        
+        
+        
+        
     def build_imaging_set(self):
-        
-        
 #make empty master imaging set (pandas structure)
         imaging_sets = pd.DataFrame(data=None,columns=[
-            'Name','Power','Wavelength','Polarisation',
-            'Exposure','Binning','Filter','Zstart','Znumber','Zseparation'])
+            'Name','Filter','Wavelength','Power','Exposure',
+            'Binning','Zstart','Znumber','Zseparation'])
 
 # access the dataframe
         for n in range(self.ImagingSets.shape[0]):
@@ -674,45 +689,32 @@ class Raymond(QtWidgets.QMainWindow):
                 name      = IS['Nam']
                 exposure  = IS['Exp']
                 binning   = IS['Bin']                                  # loop through active modes
-                for f in range(1,7,1): 
+                if IS['Zed']:
+                    znumber         = int(self.ZSlices.text())
+                    zseparation     = float(self.ZSeparation.text())
+                    zstart          = ((znumber-1) * zseparation)/-2.0
+                else:
+                    znumber         = 1
+                    zseparation     = 0
+                    zstart          = 0
+                for f in range(1,7,1): # filters
                     if IS['Fi%s' %f]:
                         filter_ = f
-                        for w in range(1,11,1):
+                        for w in range(1,11,1): # wavelengths
                             if IS['Wa%s' %w]:
                                 wavelength = w
-                                power      = IS['Po%s' %w]
-                            
-                                print(name, 'filter:', filter_, 'wavelength:', 
-                                      wavelength, 'power:', power)
-
-                znumber         = int(self.ZSlices.text())
-                zseparation     = float(self.ZSeparation.text())
-                zstart          = (znumber * zseparation)/-2.0
-                
-                
-                # imaging_sets.append(set_, ignore_index=False)
-        
-
-
-                                         
-# #get possible sets for z,w,p
-#         lambda_set          = self.getLambda_set()
-#         pol_set             = self.getPol_set()
-#         z_set, separation   = self.getZ_set()
-#         location_set        = self.get_position_set()        
-        
-        # generate list of individual scans:
-            # - positions           (x,y,z)
-            # - Zs                  (n, step size)
-            # - lambda              ()
+                                power      = IS['Po%s' %w]                
+                                set_ = [name,filter_,wavelength,power,exposure,
+                                        binning,zstart,znumber,zseparation]    
+                                imaging_sets.loc[len(imaging_sets.index)] = set_
             
         # sort according to user selection
-        return imaging_set
+        return imaging_sets
 # =============================================================================
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
-    def Imaging_loop(self, imaging_set):
-        timepoints  = [0,1,2,3,4]
+    def Imaging_loop(self, imaging_set, working_folder, timing_interval, imaging_loops):
+        timepoints  = imaging_loops
         positions   = [0,1,2,3,4]
         channels    = [0,1,2,3,4]
         z_slices    = [0,1,2,3,4]

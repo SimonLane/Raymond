@@ -16,7 +16,7 @@ from time import sleep
 # Settings
 # =============================================================================
 
-save_location = 'D://Niall//20220421 z stack//scatter 488 5//'
+save_location = 'D://Niall//20220426 z stack//scatter 488 2//'
 n = 60 #number of images
 z_sep = 0.2 #z-separation in um
 b = 0 #binning   1=> 0, 2=>1
