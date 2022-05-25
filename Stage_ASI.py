@@ -97,7 +97,7 @@ class Stage_ASI(QtGui.QWidget):
             string = string + '\r'
             self.ASI.write(string.encode())
             self.ASI.readline()
-            # self.parent().Thread_to_Gui.put(['position',self.position])            
+            # self.parent().thread_to_GUI.put(['position',self.position])            
             # print('sent to ASI:', string)
             
     def move_rel(self, X=None,Y=None,Z=None):

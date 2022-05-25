@@ -37,10 +37,10 @@ import sys, time, threading, datetime, queue, glob, os, math, ctypes
 import pandas           as pd
 import numpy            as np
 import pyqtgraph        as pg
+
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtCore import Qt
-
-
+from collections    import deque
 from scipy.ndimage.filters import gaussian_filter
 
 if sys.platform == "win32":
@@ -75,7 +75,8 @@ class Raymond(QtWidgets.QMainWindow):
 #  Microscope properties - edit as needed
 # =============================================================================
         self.demo_mode = True # If true loads GUI without connecting to any hardware, for development only
-
+        self.verbose   = True # Prints more information to the console, for debugging
+        
     # GUI appearance
         self.font_size = 9
         self.border_size = 1
@@ -156,6 +157,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.window_title = os.path.basename(__file__)
         self.ListWidgetfromIndex = 0    # keeps track of the last clicked item in imaging set list widget
         self.liveImaging = False        # Keeps track of if microsocpe is currently streaming from the camera
+        self.in_experiment = False      # Flag for tracking if experiment is ongoing
         self.currentImage = None        # Most recently acquired image, to be displayed on the GUI
         self.display_mode = 0           # color rendering of the GUI image window
         self.VF_image = []              # Most recent image from camera 3
@@ -169,14 +171,24 @@ class Raymond(QtWidgets.QMainWindow):
         self.max_pixel_value = 255                                              #default to 255, then update after querying camera
         self.updatingGUI = False                                                 #to only allow GUI to be updated by only a single function at a time
 # =============================================================================
-# Queues and threads
+# Queues and timers for inter-thread thread-safe task handling
 # =============================================================================
         self.tileScanQ = queue.Queue()
-        self.tileScanQChecker = QtCore.QTimer()
-        self.tileScanQChecker = QtCore.QTimer()
-        self.tileScanQChecker.setInterval(10)
-        self.tileScanQChecker.timeout.connect(self.imageToMap)
-
+        self.tileScan_timer = QtCore.QTimer()
+        self.tileScan_timer = QtCore.QTimer()
+        self.tileScan_timer.setInterval(10)
+        self.tileScan_timer.timeout.connect(self.imageToMap)
+        
+        #For imaging thread to update the GUI
+        self.thread_to_GUI = queue.Queue()
+        self.thread_to_GUI_timer = QtCore.QTimer()
+        self.thread_to_GUI_timer = QtCore.QTimer()
+        self.thread_to_GUI_timer.setInterval(10)
+        self.thread_to_GUI_timer.timeout.connect(self.thread_to_GUI_QCheck)
+        
+        self.GUI_to_thread = deque(['','','',''], maxlen=4)
+        self.countdown_timer = 0
+        
 # =============================================================================
 # Data Structures
 # =============================================================================
@@ -459,28 +471,40 @@ class Raymond(QtWidgets.QMainWindow):
 #~~~~~~~~~~~~~~~ Experiment progress Pane ~~~~~~~~~~~~~~~ 
         self.Expt_Start_button   = QtGui.QPushButton('Start Experiment')
         self.Expt_Start_button.released.connect(self.Imaging_setup)
-        self.progress_c          = QtGui.QProgressBar()
-        self.progress_c.setFixedHeight(10)
-        self.progress_c.setFixedWidth(200)
         self.progress_z          = QtGui.QProgressBar()
+        self.progress_c          = QtGui.QProgressBar()
         self.progress_p          = QtGui.QProgressBar()
         self.progress_t          = QtGui.QProgressBar()
-        self.progress_c_label    = QtWidgets.QLabel('        channel:')
-        self.progress_z_label    = QtWidgets.QLabel('      z-positon:')
-        self.progress_p_label    = QtWidgets.QLabel('stage position:')
-        self.progress_t_label    = QtWidgets.QLabel('      timepoint:')
+        self.progress_e          = QtGui.QProgressBar()
+        
+        for pb in [self.progress_z,self.progress_c,self.progress_p,
+                   self.progress_t,self.progress_e]:
+            pb.setFixedHeight(16)
+            pb.setFormat("%v/%m")
+            pb.setAlignment(Qt.AlignRight)
+        self.progress_t.setFormat("%vs")
+        self.progress_t.setInvertedAppearance(True)
 
+        self.progress_z_label    = QtWidgets.QLabel('       Z-positons:')
+        self.progress_c_label    = QtWidgets.QLabel('         Channels:')
+        self.progress_p_label    = QtWidgets.QLabel('Stage positions:')
+        self.progress_e_label    = QtWidgets.QLabel('      Timepoints:')
+        self.progress_t_label    = QtWidgets.QLabel('             Timer:')
         self.ProgressGroup       = QtGui.QGroupBox('Experiment Progress')
+        
         self.ProgressGroup.setLayout(QtGui.QGridLayout())
         self.ProgressGroup.layout().addWidget(self.Expt_Start_button,           0,0,1,3)
-        self.ProgressGroup.layout().addWidget(self.progress_c_label,            1,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_z_label,            2,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_z_label,            1,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_c_label,            2,0,1,2)
         self.ProgressGroup.layout().addWidget(self.progress_p_label,            3,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_t_label,            4,0,1,2)
-        self.ProgressGroup.layout().addWidget(self.progress_c,                  1,2,1,4)
-        self.ProgressGroup.layout().addWidget(self.progress_z,                  2,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_e_label,            4,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_t_label,            5,0,1,2)
+        self.ProgressGroup.layout().addWidget(self.progress_z,                  1,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_c,                  2,2,1,4)
         self.ProgressGroup.layout().addWidget(self.progress_p,                  3,2,1,4)
-        self.ProgressGroup.layout().addWidget(self.progress_t,                  4,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_e,                  4,2,1,4)
+        self.ProgressGroup.layout().addWidget(self.progress_t,                  5,2,1,4)
+        
 
 #~~~~~~~~~~~~~~~ File save Pane ~~~~~~~~~~~~~~~ 
 #Fileing Widgets
@@ -607,23 +631,29 @@ class Raymond(QtWidgets.QMainWindow):
 # Prepare for imaging
     # Build experiment
     def Imaging_setup(self):
-        if self.Expt_Start_button.text() == 'Stop Experiment':
-            print('stop button press')
+        if self.in_experiment:
             self.Expt_Start_button.setText('Stopping...')
-#            self.Gui_to_Thread[-1] = 'stop'
-#            self.ImagingLoopThread.join()
+            self.GUI_to_thread[-1] = 'stop'
+            print('before',self.thread_to_GUI.qsize())
+            time.sleep(0.1)
+            print('after',self.thread_to_GUI.qsize())
+            self.thread_to_GUI_timer.stop()
+            self.Expt_Start_button.setText('Start Experiment')
+            for pb in [self.progress_z,self.progress_c,self.progress_p,
+                   self.progress_t,self.progress_e]:
+                pb.reset()
+            return
             
-        if self.Expt_Start_button.text() == 'Start Experiment':
+        if not self.in_experiment:
 # save all settings and positions in case of crash whilst imaging
             self.saveDataFrame()
+            working_folder = self.BasicSettings.at[0,'LastUserAddress']
             if self.PositionList.shape[0] == 0: 
                 self.information('Imaging not possible, no stage positions selected', 'r')
                 return
-            self.positionsToDisk()
+            self.positionsToDataframe()
             imaging_set = self.build_imaging_set()
-            position_set = self.build_position_set()
-            #print(imaging_set)
-            print(position_set)
+        
             if imaging_set.shape[0] == 0:
                 self.information('Imaging not possible, no imaging modes selected', 'r')
                 return
@@ -653,29 +683,24 @@ class Raymond(QtWidgets.QMainWindow):
 #            Visible lasers
 #            NIR lasers
 #            SLM
-            print('starting expt')
+
+# Start threadsafe timers and queues to handle data flow and GUI updates
+            self.GUI_to_thread[0] = time.time()
+            self.thread_to_GUI_timer.start()
+            
             self.Expt_Start_button.setText('Stop Experiment')
     # Start job in a new thread
-            self.ImagingLoopThread = threading.Thread(target=self.Imaging_thread, 
-                name="imaging",args=(imaging_set, self.working_folder, 
-                                     timing_interval, imaging_loops, positions,
-                                     crop, eight))
-            
+            self.ImagingLoopThread = threading.Thread(target=self.Imaging_loop, 
+                name="imaging",args=(imaging_set, working_folder, 
+                    timing_interval, imaging_loops, self.PositionList,
+                    crop, eight))
+            print('Experiment starting')
+            self.information('Experiment starting', 'g')
             self.in_experiment = True
-            
-            self.Gui_to_Thread[-1]=''
-
+            self.GUI_to_thread[-1]=''
             self.ImagingLoopThread.start()
-    # Start threadsafe timers and queues to handle data flow and GUI updates
     
-
-    def build_position_set(self):
-        pass
-        
-        
-        
-        
-        
+    
     def build_imaging_set(self):
 #make empty master imaging set (pandas structure)
         imaging_sets = pd.DataFrame(data=None,columns=[
@@ -708,37 +733,134 @@ class Raymond(QtWidgets.QMainWindow):
                                         binning,zstart,znumber,zseparation]    
                                 imaging_sets.loc[len(imaging_sets.index)] = set_
             
-        # sort according to user selection
+        # TO DO - sort imaging order according to user selection
+        
         return imaging_sets
 # =============================================================================
 #   Main imaging Loop - Imaging Thread
 # =============================================================================
-    def Imaging_loop(self, imaging_set, working_folder, timing_interval, imaging_loops):
-        timepoints  = imaging_loops
-        positions   = [0,1,2,3,4]
-        channels    = [0,1,2,3,4]
-        z_slices    = [0,1,2,3,4]
-        wavelengths = [0,1,2,3,4]
+    def Imaging_loop(self, imaging_set, working_folder, 
+                     timing_interval, timepoints, positions, crop, eight):
+        
+        continue_experiment = True
+        self.progress_e.setRange(0,timepoints)
+        self.progress_t.setRange(0,timing_interval)
+        self.progress_p.setRange(0,len(positions))
+        self.progress_c.setRange(0,len(imaging_set))
+
+        next_timepoint = time.time()
         
         
-        for t in timepoints:
-            self.progress('t',t,len(timepoints))
-            for p in positions:
-#                Stage positioning gate
-                self.progress('p',p,len(positions))
-                for c in channels:
-                    self.progress('c',c,len(channels))
-                    for z in z_slices:
-                        self.progress('z',z,len(z_slices))
+        for t in range(timepoints):
+            while time.time() < next_timepoint:
+                if self.GUI_to_thread_Qcheck(): continue_experiment = False
+                if not continue_experiment: break
+            
+            next_timepoint = next_timepoint + timing_interval
+            self.thread_to_GUI.put(['t',next_timepoint])
+            self.thread_to_GUI.put(['e',t])
+            if next_timepoint < time.time() + timing_interval - 1:
+                print('WARNING: Insufficient time for loop')
+                self.thread_to_GUI.put( ['alert','WARNING: Insufficient time for loop','r'])
 
-                        time.sleep(0.1)
+            for p in range(len(positions)):
+                if self.GUI_to_thread_Qcheck(): continue_experiment = False
+                if not continue_experiment: break
+                self.thread_to_GUI.put(['p',p])
+                
+# set next stage position
+                if not self.demo_mode: self.Stage_ASI.move_to(X=positions.at[p,'X'],Y=positions.at[p,'Y'],Z=positions.at[p,'Z'])
+                if self.verbose: print('Stage move... X:',positions.at[p,'X'],' Y:',positions.at[p,'Y'],' Z:',positions.at[p,'Z'])
 
+                for c in range(len(imaging_set)):
+                    if self.GUI_to_thread_Qcheck(): continue_experiment = False
+                    if not continue_experiment: break
+                    self.thread_to_GUI.put(['c',c])
+                    self.progress_z.setRange(0,imaging_set.loc[c].Znumber)
+                    
+# send command to microscope here
+                    command = self.build_command(imaging_set.loc[c])
+                    
+                    for z in range(imaging_set.loc[c].Znumber):
+                        if self.GUI_to_thread_Qcheck(): continue_experiment = False
+                        if not continue_experiment: break
+                        self.thread_to_GUI.put(['z',z])
+                        
+# get images from camera here
 
-    def progress(self, bar, a,b):
-        if bar == 't': self.progress_t.setValue(int(float(a)/float(b)))
-        if bar == 'p': self.progress_p.setValue(int(float(a)/float(b)))
-        if bar == 'c': self.progress_c.setValue(int(float(a)/float(b)))
-        if bar == 'z': self.progress_z.setValue(int(float(a)/float(b)))
+                        time.sleep(0.02)
+                        
+                        
+                        self.thread_to_GUI.put(['z',z+1])
+# delay for moving ETL and mirror
+                        time.sleep(0.05)
+                    self.thread_to_GUI.put(['c',c+1])
+                    time.sleep(1)
+# delay for moving filter wheel and changing laser
+                self.thread_to_GUI.put(['p',p+1])
+                time.sleep(1)
+# delay for moving stage
+            self.thread_to_GUI.put(['e',t+1])
+            time.sleep(1)
+# delay for timing gate here
+        
+        if continue_experiment:
+            self.thread_to_GUI.put( ['alert','Experiment completed','g'])
+        else:
+            self.thread_to_GUI.put( ['alert','User ended experiment','y'])
+
+        self.stop_experiment()
+        self.Imaging_setup()
+        self.in_experiment = False
+        
+        
+    def stop_experiment(self):
+        print('Imaging thread - hardware cleanup routine...')
+        self.thread_to_GUI.put( ['alert','Imaging thread - hardware cleanup routine...','g'])
+        #TO DO - do stuff before stopping the thread...
+        # make sure lasers are off
+        # galvo to safe position
+        # release camera
+        # set other hardware to safe/default positions
+    
+    # TO DO = move to Teensy class 
+    def build_command(self, imaging_set):
+        command = ""
+    
+    
+    def GUI_to_thread_Qcheck(self):         
+#        imaging thread calls this function regularly to check if it should continue imaging
+        #return True, which will cause imaging thread to leave imaging loop and complete cleanly
+        main_window_checkin = int(self.GUI_to_thread[0])
+
+        if time.time() > main_window_checkin + 10:
+            print('Imaging thread lost contact with the GUI')
+            self.thread_to_GUI.put( ['alert','Imaging thread lost contact with the GUI','y'])
+            return True        
+        if self.GUI_to_thread[-1] == 'stop':
+            return True
+        return False
+    
+    def thread_to_GUI_QCheck(self):
+        while self.thread_to_GUI.qsize()>0:
+            task = self.thread_to_GUI.get()
+            if task[0] == 'e': self.progress_e.setValue(int(task[1]))
+            if task[0] == 't': self.countdown_timer = int(task[1])
+            if task[0] == 'p': self.progress_p.setValue(int(task[1]))
+            if task[0] == 'c': self.progress_c.setValue(int(task[1]))
+            if task[0] == 'z': self.progress_z.setValue(int(task[1]))
+            if task[0] == 'alert': 
+                self.information(task[1],task[2])
+                for pb in [self.progress_z,self.progress_c,self.progress_p,
+                   self.progress_t,self.progress_e]:
+                    pb.reset()
+        # Add timestamp to G2T queue so the imaging thread can know 
+        # main thread is still running
+        self.GUI_to_thread[0] = time.time()
+        # update countdown timer
+        t = int((self.countdown_timer - time.time()))
+        self.progress_t.setValue(t)
+        
 # =============================================================================
 #   ViewFinder functions
 # =============================================================================
@@ -758,7 +880,7 @@ class Raymond(QtWidgets.QMainWindow):
         # start live imaging on camera 3
         self.showViewFinder()
         # start a timer to check for signals from the worker
-        self.tileScanQChecker.start()
+        self.tileScan_timer.start()
         #start the worker thread to control the stage
     # To Do - update visible range to match tiled area dimensions
         r = self.tileDisplayLimits[self.tileAreaSelection.currentIndex()]
@@ -796,7 +918,7 @@ class Raymond(QtWidgets.QMainWindow):
                 self.stage.move_to(x,y,z)
                 while(True):
                     if not self.camera3.is_live or not self.stage.flag_CONNECTED:
-                        self.tileScanQChecker.stop()
+                        self.tileScanQ_timer.stop()
                         self.stage.rapidMode(rapid=False)
                         print("tile scan aborted")
                         return
@@ -811,7 +933,7 @@ class Raymond(QtWidgets.QMainWindow):
             Xums.reverse()
         time.sleep(0.1)
         self.showViewFinder() #turn off live view
-        self.tileScanQChecker.stop()
+        self.tileScan_timer.stop()
         self.stage.rapidMode(rapid=False)
         print("tile scan complete: ", time.time() - t, "s")
     
@@ -988,7 +1110,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.TimingDuration.setText('%02d:%02d:%02d' %(DurationH,DurationM,DurationS))
 
             #timing has changed, send to imaging thread
-            # self.Gui_to_Thread[1] = [interval,loops]
+            # self.GUI_to_thread[1] = [interval,loops]
 
         except:
             self.information("Please enter valid interval and loop values.", 'y')
@@ -1094,8 +1216,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.PositionList.at[r,'X']      = float(self.PositionListWidget.cellWidget(r,1).text())
             self.PositionList.at[r,'Y']      = float(self.PositionListWidget.cellWidget(r,2).text())
             self.PositionList.at[r,'Z']      = float(self.PositionListWidget.cellWidget(r,3).text())
-        self.positionsToDisk()
-        
+        self.positionsToDisk()  
     
     def positionsToDisk(self):
         if self.PositionList.shape[0] != 0:
@@ -1336,6 +1457,11 @@ class Raymond(QtWidgets.QMainWindow):
         self.frametimer.stop()
         self.saveDataFrame()
         self.positionsToDisk()
+        # TO DO - print warning if the imaging thread is still running
+        active_threads = threading.enumerate()
+        # print(active_threads)
+        for thread in active_threads:
+            if thread.name == 'imaging': print('WARNING, imaging thread still running, restart kernel')
         if not self.demo_mode:
             self.camera1.close()
             self.TLsdk.dispose()
