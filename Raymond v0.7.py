@@ -74,9 +74,15 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Microscope properties - edit as needed
 # =============================================================================
-        self.demo_mode = True # If true loads GUI without connecting to any hardware, for development only
+        self.demo_mode = False # If true loads GUI without connecting to any hardware, for development only
         self.verbose   = True # Prints more information to the console, for debugging
-        
+    
+    # Camera calibrations
+        self.VF_cal = 700/261 # um/px
+        self.TL_cal = 1         # to do (px/um)
+        self.stageheight = self.stagewidth = int(12000 / self.VF_cal) # stage map is 22mm in pixels
+        # (+-10mm movement + ~half a FOV at each side)
+    
     # GUI appearance
         self.font_size = 9
         self.border_size = 1
@@ -129,12 +135,12 @@ class Raymond(QtWidgets.QMainWindow):
         
     # Tile area options
         self.tileAreaNames = [
-            '~5x5mm     (~2s)',
-            '~8x8mm     (~10s)',
-            '~14x14mm   (~25s)',
-            '~22x22mm   (~70s)']    
-        self.tileAreas          = [(2,1),(3,2),(5,3),(8,5)]
-        self.tileDisplayLimits  = [(2.8),(4.5),(7.0),(11.1)]
+            '~6x6mm     (~2s)',
+            '~9x9mm     (~10s)',
+            '~15x15mm   (~25s)',
+            '~20x20mm   (~70s)']    
+        self.tileAreas          = [(2,1),(3,2),(5,3),(7,5)]
+        self.tileDisplayLimits  = [(5.8),(8.7),(14.5),(20.4)]
 # =============================================================================
 # End editable properties      
 # =============================================================================
@@ -161,7 +167,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.currentImage = None        # Most recently acquired image, to be displayed on the GUI
         self.display_mode = 0           # color rendering of the GUI image window
         self.VF_image = []              # Most recent image from camera 3
-        self.VFmap = np.zeros((231*23,231*23),dtype=np.float32)   # Holds the tiled viewfider image
+        self.VFmap = np.zeros((self.stagewidth,self.stageheight),dtype=np.float32)   # Holds the tiled viewfider image
         self.modifier_image = np.load('VFModifier.npy')
         self.display_mode = 0           # Update for each image (0) or maintain the current brightness (1)
         self.display_colour_mode = 0    # Use greyscale (0) or colourmap (1) LUT
@@ -176,7 +182,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.tileScanQ = queue.Queue()
         self.tileScan_timer = QtCore.QTimer()
         self.tileScan_timer = QtCore.QTimer()
-        self.tileScan_timer.setInterval(10)
+        self.tileScan_timer.setInterval(20)
         self.tileScan_timer.timeout.connect(self.imageToMap)
         
         #For imaging thread to update the GUI
@@ -768,7 +774,7 @@ class Raymond(QtWidgets.QMainWindow):
                 if not continue_experiment: break
                 self.thread_to_GUI.put(['p',p])
                 
-# set next stage position
+# send command to stage here
                 if not self.demo_mode: self.Stage_ASI.move_to(X=positions.at[p,'X'],Y=positions.at[p,'Y'],Z=positions.at[p,'Z'])
                 if self.verbose: print('Stage move... X:',positions.at[p,'X'],' Y:',positions.at[p,'Y'],' Z:',positions.at[p,'Z'])
 
@@ -777,8 +783,9 @@ class Raymond(QtWidgets.QMainWindow):
                     if not continue_experiment: break
                     self.thread_to_GUI.put(['c',c])
                     self.progress_z.setRange(0,imaging_set.loc[c].Znumber)
-                    
-# send command to microscope here
+# send command to filter here
+# send command to laser control board here                    
+# send command to microscope control board here
                     command = self.build_command(imaging_set.loc[c])
                     
                     for z in range(imaging_set.loc[c].Znumber):
@@ -825,8 +832,15 @@ class Raymond(QtWidgets.QMainWindow):
     
     # TO DO = move to Teensy class 
     def build_command(self, imaging_set):
-        command = ""
-    
+        # need to pass: 
+        #    Filter, Exposure, ZStart, Znumber, Zseparation
+        # to the lightsheet controller
+        # commandLSC = "/S.%s.%s.%s.%s.%s;" %(imaging_set."Fil",imaging_set."Exp",imaging_set."Zstart",imaging_set."Znumber",imaging_set."Zseparation")
+        # need to pass: 
+        #    Wavelength, Power
+        # to the laser controller
+        # commandLAS = "/S.%s.%s;" %(imaging_set."Wav",imaging_set."Pow")
+        pass
     
     def GUI_to_thread_Qcheck(self):         
 #        imaging thread calls this function regularly to check if it should continue imaging
@@ -869,10 +883,11 @@ class Raymond(QtWidgets.QMainWindow):
         event.accept()
         if event.double():
             px = event.pos()
-            print ('double click: ', int(px.x()),int(px.y()))
+            print ('double click: (px) ', int(px.x()),int(px.y()))
             print('um:', self.VFpx2um(px.x(), px.y()) )
-            xum, yum = self.VFpx2um(px.x(), px.y())
-            self.stage.move_to(X=xum, Y=yum )
+            #to do convert px to um
+            # xum, yum = self.VFpx2um(px.x(), px.y())
+            # self.stage.move_to(X=xum, Y=yum )
     
     def setupTileScan(self):
         #set stage to 'rapid mode'
@@ -890,63 +905,84 @@ class Raymond(QtWidgets.QMainWindow):
                 name="tile scan", args=())
         self.tileScanThread.start()    
 
-    def VFum2px(self, umx,umy):
-        pxx = (umx * 0.231) + (10.5*231)
-        pxy = (231*23) - ((umy * 0.231) + (13.5*231))
-        return list((round(pxx),round(pxy)))
+    def VFum2px(self, umx,umy,FOVx,FOVy):
+        print('um:',round(umx),round(umy))
+        #assuming 0,0 is image bottom left
+        #shift half image size (in um)
+        umx = umx - (FOVx/2)
+        umy = umy - (FOVy/2)
+        #convert to px and shift by half stage dimension
+        pxx = (umx / self.VF_cal) + (self.stagewidth  / 2)
+        pxy = (umy / self.VF_cal) + (self.stageheight / 2)
+        print('px:',round(pxx),round(pxy))
+        return list((round(pxx),round(pxy),FOVx,FOVy))
     
     def VFpx2um(self, pxx,pxy):
-        umx = ((pxx - 2656) / 0.231) - 1385
-        umy = ((pxy - 2656) / -0.231) + 2217 
-        return list((umx,umy))
+        pass
+        # umx = ((pxx - 2656) / 0.231) - 1385
+        # umy = ((pxy - 2656) / -0.231) + 2217 
+        # return list((umx,umy))
     
     def doTileScan(self): # Runs in thread
         tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
         fp = True
         t = time.time()
-        FOVx = 2770 #um
-        FOVy = 4433 #um
-        Xrange = (FOVx)*tilesX
-        Yrange = (FOVy)*tilesY
-        # currentX = 0 #To do - get current stage position
-        # currentY = 0
+        FOVx = round(540 * self.VF_cal)  #um, use only half the image for more consistent brightness
+        FOVy = round(1280 * self.VF_cal)  #um
+        print('FOV (um):',FOVx,'x',FOVy)
+        Xrange = FOVx*tilesX*2 #compensate for half image size
+        Yrange = FOVy*tilesY
+        print('tiles:',tilesX,'x',tilesY)
+        currentX = 0 #To do - get current stage position to use as centre of the scan
+        currentY = 0
+        #To Do - limit scan area in line with stage limits
         Xums = list(range(int(Xrange/-2)+int(FOVx*0.5),int(Xrange/2)+int(FOVx*0.5),FOVx)) #in microns
         Yums = list(range(int(Yrange/-2)+int(FOVy*0.5),int(Yrange/2)+int(FOVy*0.5),FOVy)) #in microns
-        z  = 0 #to do - update to current Z position
+        
+        print(Xums)
+        print(Yums)
+        # print(self.stage.get_position())
+        currentZ = 2000 #to do - update to current Z position
         for yn, y in enumerate(Yums):
             for xn, x in enumerate(Xums):
-                self.stage.move_to(x,y,z)
+                self.stage.move_to(currentX + x, currentY + y, currentZ)
+                print('moving to:',x,y,currentZ)
+                print('move',time.time(), self.tileScanQ.qsize())
                 while(True):
+                    time.sleep(0.1)
                     if not self.camera3.is_live or not self.stage.flag_CONNECTED:
                         self.tileScanQ_timer.stop()
                         self.stage.rapidMode(rapid=False)
                         print("tile scan aborted")
                         return
-                    s = self.stage.is_moving()
-                    if s: time.sleep(0.1)
+                    if self.stage.is_moving(): pass 
+                    # TO DO - replace with TTL signal from stage
                     else:
-                        self.tileScanQ.put(self.VFum2px(x,y))
+                        self.tileScanQ.put([self.VFum2px(x,y,FOVx,FOVy),self.VF_image.astype('float16')])
+                        print('put',time.time(), self.tileScanQ.qsize())
                         if fp: 
                             t = time.time()
                             fp = False
                         break
             Xums.reverse()
-        time.sleep(0.1)
+        while(self.tileScanQ.qsize() > 0): time.sleep(0.1)
         self.showViewFinder() #turn off live view
         self.tileScan_timer.stop()
         self.stage.rapidMode(rapid=False)
+        print('end',time.time(), self.tileScanQ.qsize())
         print("tile scan complete: ", time.time() - t, "s")
+        # TO DO - move back to start position
     
     def showViewFinder(self):
         if self.camera3.flag_CONNECTED:
             if not self.liveImaging:
                 print('starting viewfinder')
                 # set exposure
-                self.camera3.exposure(5000)
+                self.camera3.exposure(4000) #To Do - make slider widget to adjust this as needed
                 self.camera3.live_mode()
                 self.frametimer.setSingleShot(False)
                 self.frametimer.timeout.connect(self.grabImageFromVF)
-                self.frametimer.start(30)
+                self.frametimer.start(20)
                 self.viewFindButton.setText('Stop')
                 self.liveImaging = True
             else:
@@ -958,7 +994,7 @@ class Raymond(QtWidgets.QMainWindow):
                 
     def grabImageFromVF(self):
         image = self.camera3.getFrame() #is this the newest frame in the buffer or the oldest?
-        # image = np.flip(np.rot90(image),1)
+        #image = np.flip(np.rot90(image),1)
         if len(image) != 0:
             self.display_image(image)
             self.VF_image = image.astype('float32') #keep a copy of the last image in memory for use in the map
@@ -978,17 +1014,16 @@ class Raymond(QtWidgets.QMainWindow):
         
     def imageToMap(self):
         if(self.tileScanQ.qsize() > 0):
-            x,y = self.tileScanQ.get() #in pixels
-            image = self.VF_image[640:1280,:]
-            # print('____________________')
-            # print('new image shape: ', image.shape)
-            # print('map shape:       ', self.VFmap.shape)
-            # print('image position:  ', x,y)
-            self.VFmap[x:x+image.shape[0], y:y+image.shape[1]] = image * self.modifier_image
+            i = self.tileScanQ.get() 
+            x,y,FOVx,FOVy = i[0]# x,y in pixels, FOV in um
+            image = i[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
+            print('get',time.time(), self.tileScanQ.qsize())
+            self.VFmap[x:x+image.shape[0], y:y+image.shape[1]] = image #* self.modifier_image
             #set to the map
             self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
-                    levels=(15,240), scale=(1/231,1/231), 
-                    pos=(-11.9,-11.6), autoRange=False)
+                    levels=(15,240), autoRange=True)
+                    # scale=(1/231,1/231), 
+                    # pos=(-11.9,-11.6), 
 
 # =============================================================================
 #  Image Display Functions

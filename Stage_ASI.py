@@ -18,13 +18,13 @@ class Stage_ASI(QtGui.QWidget):
         self.position = []
         self.port = port
         self.name = name
-        self.imaging_limits     = [[10000,-10000],[10000,-10000],[3000,-10000]] #X +- 25mm  Y +- 15mm  Z +1mm -2mm
+        self.imaging_limits     = [[10000,-10000],[10000,-10000],[2000,-10000]] #X +- 10mm  Y +- 10mm  Z +2mm -10mm
         self.escape_limits      = [[1500,-15000],[21000,-4000],[1000,-21000]]
         self.override_limits    = [[20000,-20000],[20000,-20000],[20000,-10000]]
         self.limits             = self.imaging_limits
         self.home_position      = [0,0,0]
         self.start_position     = [0,0,-2000]
-        self.escape_position    = [-14000,20000,-21000]
+        self.escape_position    = [-14000,0,-21000]
         self.prev_position      = [0,0,-2000]
 
     def connect(self):
@@ -138,7 +138,6 @@ class Stage_ASI(QtGui.QWidget):
             for item in in_[1:-1]:
                 p.append(float(item)/10.0)
             self.position = p
-            print(p)
             return p
         else: 
 #            returns position in µm
