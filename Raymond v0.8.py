@@ -419,7 +419,7 @@ class Raymond(QtWidgets.QMainWindow):
         for item in self.tileAreaNames:
             self.tileAreaSelection.addItem(item)
         self.mapPlot = pg.PlotItem()
-        self.mapImageWidget             = pg.ImageView(view = self.mapPlot, border = True)
+        self.mapImageWidget             = pg.ImageView(view = self.mapPlot)
 
         # proxy = pg.SignalProxy(self.mapPlot.scene().sigMouseClicked,
         #                         rateLimit=60, slot=self.on_click_event)
