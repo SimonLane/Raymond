@@ -64,8 +64,86 @@ class CheckableComboBox(QtWidgets.QComboBox):
         else:
             item.setCheckState(Qt.Checked)
         self.parent().GUI_to_dataframe()
-            
-            
+
+
+class PhotoViewer(QtWidgets.QGraphicsView):
+    photoClicked = QtCore.pyqtSignal(QtCore.QPoint)
+
+    def __init__(self, parent):
+        super(PhotoViewer, self).__init__(parent)
+        self._zoom = 0
+        self._empty = True
+        self._scene = QtWidgets.QGraphicsScene(self)
+        self._scene.setSceneRect(QtCore.QRectF(-11000,-11000,22000,22000))
+        self._photo = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(22000,22000))
+        self._scene.addItem(self._photo)
+        # self._photo.setPos(-10000,-10000)
+        self._scene.addLine(-1000, 1000, -1000, 1000)
+        self.setScene(self._scene)
+        self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setBackgroundBrush(QtGui.QBrush(QtGui.QColor(30, 30, 30)))
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+    def hasPhoto(self):
+        return not self._empty
+
+    def fitInView(self, scale=True):
+        rect = QtCore.QRectF(self._photo.pixmap().rect())
+        if not rect.isNull():
+            self.setSceneRect(rect)
+            if self.hasPhoto():
+                unity = self.transform().mapRect(QtCore.QRectF(0, 0, 1, 1))
+                self.scale(1 / unity.width(), 1 / unity.height())
+                viewrect = self.viewport().rect()
+                scenerect = self.transform().mapRect(rect)
+                factor = min(viewrect.width() / scenerect.width(),
+                             viewrect.height() / scenerect.height())
+                self.scale(factor, factor)
+            self._zoom = 0
+
+    def mouseDoubleClickEvent(self, e):
+        print(e.x(), e.y())
+
+    def setPhoto(self, pixmap=None):
+        self._zoom = 0
+        self._empty = False
+        self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+        # self._photo.setPixmap(pixmap)
+        self._scene.addPixmap(pixmap)
+        item_list = self._scene.items()
+        item_list[0].setPos(x+11000,y+11000)
+        self.fitInView()
+
+    def wheelEvent(self, event):
+        if self.hasPhoto():
+            if event.angleDelta().y() > 0:
+                factor = 1.25
+                self._zoom += 1
+            else:
+                factor = 0.8
+                self._zoom -= 1
+            if self._zoom > 0:
+                self.scale(factor, factor)
+            elif self._zoom == 0:
+                self.fitInView()
+            else:
+                self._zoom = 0
+
+    def toggleDragMode(self):
+        if self.dragMode() == QtWidgets.QGraphicsView.ScrollHandDrag:
+            self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
+        elif not self._photo.pixmap().isNull():
+            self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+
+    def mousePressEvent(self, event):
+        if self._photo.isUnderMouse():
+            self.photoClicked.emit(QtCore.QPoint(event.pos()))
+        super(PhotoViewer, self).mousePressEvent(event)
+
+
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
         super(Raymond, self).__init__()
@@ -169,7 +247,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.VF_image = []              # Most recent image from camera 3
         self.VFmap = np.zeros((self.stagewidth,self.stageheight),dtype=np.uint8)   # Holds the tiled viewfider image
         print('map memory size:',self.VFmap.shape, self.VFmap.size, self.VFmap.itemsize, self.VFmap.size * self.VFmap.itemsize)
-        self.modifier_image = np.load('VFModifier.npy')
+        self.modifier_image = np.load('VFmodifier.npy')
         self.display_mode = 0           # Update for each image (0) or maintain the current brightness (1)
         self.display_colour_mode = 0    # Use greyscale (0) or colourmap (1) LUT
         self.colourcmap = pg.ColorMap([0.0,0.25,0.50,0.75,1.0],[[0,0,0,255],[0,0,255,255],[0,255,0,255],[255,0,0,255],[255,255,255,255]])
@@ -210,9 +288,9 @@ class Raymond(QtWidgets.QMainWindow):
         self.information("Loaded GUI from: %s" %(__file__), 'g')
         
 #  set blank image to the map
-        self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
-                    levels=(15,240), scale=(1/231,1/231), 
-                    pos=(-11.9,-11.6), autoRange=False)
+        # self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
+                    # levels=(15,240), scale=(1/231,1/231), 
+                    # pos=(-11.9,-11.6), autoRange=False)
         
 # connect to devices
         if not self.demo_mode:
@@ -418,12 +496,9 @@ class Raymond(QtWidgets.QMainWindow):
         self.tileAreaSelection.setFixedWidth(60)
         for item in self.tileAreaNames:
             self.tileAreaSelection.addItem(item)
-        self.mapPlot = pg.PlotItem()
-        self.mapImageWidget             = pg.ImageView(view = self.mapPlot)
-
-        # proxy = pg.SignalProxy(self.mapPlot.scene().sigMouseClicked,
-        #                         rateLimit=60, slot=self.on_click_event)
         
+        
+
         self.NewPButton       = QtWidgets.QPushButton('+')
         self.DelPButton       = QtWidgets.QPushButton('-')
         self.LoadPButton      = QtWidgets.QPushButton('Load')
@@ -440,21 +515,14 @@ class Raymond(QtWidgets.QMainWindow):
             self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
         self.PositionListWidget.setFixedWidth(230)
         
-        self.mapImageWidget.getImageItem().mouseClickEvent = self.on_click_event
+        self.viewer = PhotoViewer(self)
         
-        self.mapImageWidget.ui.roiBtn.hide()
-        self.mapImageWidget.ui.menuBtn.hide()
-        self.mapImageWidget.ui.histogram.hide()
-        self.mapImageWidget.view.setXRange(-11, 11, padding=0)
-        self.mapImageWidget.view.setYRange(-11, 11, padding=0)
-        self.mapImageWidget.view.setFixedHeight(350)
-        self.mapImageWidget.view.setFixedWidth(350)
-        
+            
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
         self.tileScanButton.setFixedWidth(60)                                 # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
-        self.ViewFinderGroup.layout().addWidget(self.mapImageWidget,            0,0,10,6)
+        self.ViewFinderGroup.layout().addWidget(self.viewer,                 0,0,9,6)
         self.ViewFinderGroup.layout().addWidget(self.PositionListWidget,        2,6,8,4)
         self.ViewFinderGroup.layout().addWidget(self.NewPButton,                1,6,1,1)
         self.ViewFinderGroup.layout().addWidget(self.DelPButton,                1,7,1,1)
@@ -900,14 +968,12 @@ class Raymond(QtWidgets.QMainWindow):
         #start the worker thread to control the stage
     # To Do - update visible range to match tiled area dimensions
         r = self.tileDisplayLimits[self.tileAreaSelection.currentIndex()]
-        self.mapImageWidget.view.setXRange(-r, r, padding=0)
-        self.mapImageWidget.view.setYRange(-r, r, padding=0)
+
         self.tileScanThread = threading.Thread(target=self.doTileScan,
                 name="tile scan", args=())
         self.tileScanThread.start()    
 
     def VFum2px(self, umx,umy,FOVx,FOVy):
-        print('um:',round(umx),round(umy))
         #assuming 0,0 is image bottom left
         #shift half image size (in um)
         umx = umx - (FOVx/2)
@@ -915,7 +981,6 @@ class Raymond(QtWidgets.QMainWindow):
         #convert to px and shift by half stage dimension
         pxx = (umx / self.VF_cal) + (self.stagewidth  / 2)
         pxy = (umy / self.VF_cal) + (self.stageheight / 2)
-        print('px:',round(pxx),round(pxy))
         return list((round(pxx),round(pxy),FOVx,FOVy))
     
     def VFpx2um(self, pxx,pxy):
@@ -930,25 +995,19 @@ class Raymond(QtWidgets.QMainWindow):
         t = time.time()
         FOVx = round(540 * self.VF_cal)  #um, use only half the image for more consistent brightness
         FOVy = round(1280 * self.VF_cal)  #um
-        print('FOV (um):',FOVx,'x',FOVy)
         Xrange = FOVx*tilesX*2 #compensate for half image size
         Yrange = FOVy*tilesY
-        print('tiles:',tilesX,'x',tilesY)
         currentX = 0 #To do - get current stage position to use as centre of the scan
         currentY = 0
         #To Do - limit scan area in line with stage limits
         Xums = list(range(int(Xrange/-2)+int(FOVx*0.5),int(Xrange/2)+int(FOVx*0.5),FOVx)) #in microns
         Yums = list(range(int(Yrange/-2)+int(FOVy*0.5),int(Yrange/2)+int(FOVy*0.5),FOVy)) #in microns
-        print('map memory size:',self.VFmap.shape, self.VFmap.size, self.VFmap.itemsize, self.VFmap.size * self.VFmap.itemsize)
-        print(Xums)
-        print(Yums)
+        
         # print(self.stage.get_position())
         currentZ = 2000 #to do - update to current Z position
         for yn, y in enumerate(Yums):
             for xn, x in enumerate(Xums):
                 self.stage.move_to(currentX + x, currentY + y, currentZ)
-                print('moving to:',x,y,currentZ)
-                print('move',time.time(), self.tileScanQ.qsize())
                 while(True):
                     time.sleep(0.1)
                     if not self.camera3.is_live or not self.stage.flag_CONNECTED:
@@ -960,7 +1019,6 @@ class Raymond(QtWidgets.QMainWindow):
                     # TO DO - replace with TTL signal from stage
                     else:
                         self.tileScanQ.put([self.VFum2px(x,y,FOVx,FOVy),self.VF_image])
-                        print('put',time.time(), self.tileScanQ.qsize())
                         if fp: 
                             t = time.time()
                             fp = False
@@ -972,7 +1030,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.stage.rapidMode(rapid=False)
         print('end',time.time(), self.tileScanQ.qsize())
         print("tile scan complete: ", time.time() - t, "s")
-        print('map memory size:',self.VFmap.shape, self.VFmap.size, self.VFmap.itemsize, self.VFmap.size * self.VFmap.itemsize)
         # TO DO - move back to start position
     
     def showViewFinder(self):
@@ -999,6 +1056,7 @@ class Raymond(QtWidgets.QMainWindow):
         #image = np.flip(np.rot90(image),1)
         if len(image) != 0:
             self.display_image(image)
+            image = np.flip(np.rot90(image),1)
             #convert image to lower bit-depth for the map
             self.VF_image = image.astype('uint8') #keep a copy of the last image in memory for use in the map
  
@@ -1017,17 +1075,11 @@ class Raymond(QtWidgets.QMainWindow):
         
     def imageToMap(self):
         if(self.tileScanQ.qsize() > 0):
-            i = self.tileScanQ.get() 
-            x,y,FOVx,FOVy = i[0]# x,y in pixels, FOV in um
-            image = i[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
-            print('get',time.time(), self.tileScanQ.qsize())
-            self.VFmap[x:x+image.shape[0], y:y+image.shape[1]] = image #* self.modifier_image
-            #set to the map
-            self.mapImageWidget.setImage(self.VFmap, autoLevels=False, 
-                    levels=(15,240), autoRange=False)
-                    # scale=(1/231,1/231), 
-                    # pos=(-11.9,-11.6), 
-
+            image = self.tileScanQ.get() 
+            x,y,FOVx,FOVy = image[0]# x,y in pixels, FOV in um
+            img = QtGui.QImage(image[1].data, image[1].shape[1], image[1].shape[0], QtGui.QImage.Format_Grayscale8)
+            self.viewer.setPhoto(QtGui.QPixmap(img))
+            
 # =============================================================================
 #  Image Display Functions
 # =============================================================================
