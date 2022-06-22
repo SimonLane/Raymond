@@ -69,16 +69,31 @@ class CheckableComboBox(QtWidgets.QComboBox):
 class PhotoViewer(QtWidgets.QGraphicsView):
     photoClicked = QtCore.pyqtSignal(QtCore.QPoint)
 
-    def __init__(self, parent):
+    def __init__(self, parent, calibration, w, h):
         super(PhotoViewer, self).__init__(parent)
         self._zoom = 0
+        self.um2px = 1/calibration
+        self.px2um = calibration
+        self.stageDim = [int(w/calibration),int(h/calibration)]
+        self.stageCen = [int(self.stageDim[0]/2),int(self.stageDim[1]/2)]
         self._empty = True
         self._scene = QtWidgets.QGraphicsScene(self)
-        self._scene.setSceneRect(QtCore.QRectF(-11000,-11000,22000,22000))
-        self._photo = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(22000,22000))
+        self._scene.setSceneRect(QtCore.QRectF(0,0,self.stageDim[0],self.stageDim[1]))
+        self._photo = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(self.stageDim[0],self.stageDim[1]))
         self._scene.addItem(self._photo)
-        # self._photo.setPos(-10000,-10000)
-        self._scene.addLine(-1000, 1000, -1000, 1000)
+        
+        # add mm edge grid
+        pen = QtGui.QPen()
+        pen.setWidth(5)
+        pen.setColor(QtGui.QColor('white'))
+        for x in range(0,self.stageDim[0],int(1000*self.um2px)):
+            self._scene.addLine(x, 0, x, 200, pen)
+            self._scene.addLine(x, self.stageDim[0]-200, x,self.stageDim[0], pen)
+        for y in range(0,self.stageDim[1],int(1000*self.um2px)):
+            self._scene.addLine(0, y, 200, y, pen)
+            self._scene.addLine(0, self.stageDim[1]-200, 200, self.stageDim[1], pen)
+        
+            
         self.setScene(self._scene)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
@@ -86,6 +101,15 @@ class PhotoViewer(QtWidgets.QGraphicsView):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setBackgroundBrush(QtGui.QBrush(QtGui.QColor(30, 30, 30)))
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+    def drawForeground(self, painter, rect):
+        pen = QtGui.QPen()
+        pen.setWidth(5)
+        pen.setColor(QtGui.QColor('red'))
+        # add centre lines
+        
+        self._scene.addLine(self.stageCen[0], 0, self.stageCen[0], self.stageDim[0], pen)
+        self._scene.addLine(0, self.stageCen[1], self.stageDim[1], self.stageCen[1], pen)
 
     def hasPhoto(self):
         return not self._empty
@@ -105,16 +129,18 @@ class PhotoViewer(QtWidgets.QGraphicsView):
             self._zoom = 0
 
     def mouseDoubleClickEvent(self, e):
-        print(e.x(), e.y())
-
-    def setPhoto(self, pixmap=None):
+        clickPx = [self.mapToScene(e.x(), e.y()).x(),self.mapToScene(e.x(), e.y()).y()]
+        clickUm = [clickPx[0]*self.px2um,clickPx[1]*self.px2um]
+        print('px:', clickPx)
+        print('um:', clickUm)
+        
+    def setPhoto(self, img,x,y):
         self._zoom = 0
         self._empty = False
         self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-        # self._photo.setPixmap(pixmap)
-        self._scene.addPixmap(pixmap)
+        self._scene.addPixmap(QtGui.QPixmap(img))
         item_list = self._scene.items()
-        item_list[0].setPos(x+11000,y+11000)
+        item_list[0].setPos(x,y)
         self.fitInView()
 
     def wheelEvent(self, event):
@@ -486,21 +512,23 @@ class Raymond(QtWidgets.QMainWindow):
 #~~~~~~~~~~~~~~~ View Finder ~~~~~~~~~~~~~~~  
         self.ViewFinderGroup            = QtWidgets.QGroupBox('Stage Map')
         self.viewFindButton             = QtGui.QPushButton("Live")
-        self.viewFindButton.setFixedWidth(60)
+        self.viewFindButton.setFixedWidth(50)
         self.viewFindButton.released.connect(self.showViewFinder)
         
         self.VFModButton                = QtGui.QPushButton("set BG")
         self.VFModButton.released.connect(self.update_modifier_image)
-        self.VFModButton.setFixedWidth(60)
+        self.VFModButton.setFixedWidth(50)
         self.tileAreaSelection          = QtGui.QComboBox()
-        self.tileAreaSelection.setFixedWidth(60)
+        self.tileAreaSelection.setFixedWidth(100)
         for item in self.tileAreaNames:
             self.tileAreaSelection.addItem(item)
         
         
 
         self.NewPButton       = QtWidgets.QPushButton('+')
+        self.NewPButton.setFixedWidth(20)
         self.DelPButton       = QtWidgets.QPushButton('-')
+        self.DelPButton.setFixedWidth(20)
         self.LoadPButton      = QtWidgets.QPushButton('Load')
         self.NewPButton.released.connect(lambda: self.addPos())
         self.DelPButton.released.connect(lambda: self.deletePos())
@@ -515,22 +543,22 @@ class Raymond(QtWidgets.QMainWindow):
             self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
         self.PositionListWidget.setFixedWidth(230)
         
-        self.viewer = PhotoViewer(self)
+        self.viewer = PhotoViewer(self, self.VF_cal, 20000,20000)
         
             
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
         self.tileScanButton.setFixedWidth(60)                                 # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
-        self.ViewFinderGroup.layout().addWidget(self.viewer,                 0,0,9,6)
-        self.ViewFinderGroup.layout().addWidget(self.PositionListWidget,        2,6,8,4)
+        self.ViewFinderGroup.layout().addWidget(self.viewer,                    0,0,9,6)
+        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,6,1,2)
+        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               0,8,1,2)
+        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         0,9,1,2)
         self.ViewFinderGroup.layout().addWidget(self.NewPButton,                1,6,1,1)
         self.ViewFinderGroup.layout().addWidget(self.DelPButton,                1,7,1,1)
         self.ViewFinderGroup.layout().addWidget(self.LoadPButton,               1,8,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,6,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.VFModButton,               0,7,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         0,8,1,2)
-        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            0,9,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            1,9,1,1)
+        self.ViewFinderGroup.layout().addWidget(self.PositionListWidget,        2,6,8,5)
 
 #~~~~~~~~~~~~~~~ Information Pane ~~~~~~~~~~~~~~~ 
         self.Information_text_window = QtGui.QTextEdit()
@@ -993,7 +1021,7 @@ class Raymond(QtWidgets.QMainWindow):
         tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
         fp = True
         t = time.time()
-        FOVx = round(540 * self.VF_cal)  #um, use only half the image for more consistent brightness
+        FOVx = round(512 * self.VF_cal)  #um, use only half the image for more consistent brightness
         FOVy = round(1280 * self.VF_cal)  #um
         Xrange = FOVx*tilesX*2 #compensate for half image size
         Yrange = FOVy*tilesY
@@ -1053,10 +1081,8 @@ class Raymond(QtWidgets.QMainWindow):
                 
     def grabImageFromVF(self):
         image = self.camera3.getFrame() #is this the newest frame in the buffer or the oldest?
-        #image = np.flip(np.rot90(image),1)
         if len(image) != 0:
             self.display_image(image)
-            image = np.flip(np.rot90(image),1)
             #convert image to lower bit-depth for the map
             self.VF_image = image.astype('uint8') #keep a copy of the last image in memory for use in the map
  
@@ -1077,8 +1103,11 @@ class Raymond(QtWidgets.QMainWindow):
         if(self.tileScanQ.qsize() > 0):
             image = self.tileScanQ.get() 
             x,y,FOVx,FOVy = image[0]# x,y in pixels, FOV in um
-            img = QtGui.QImage(image[1].data, image[1].shape[1], image[1].shape[0], QtGui.QImage.Format_Grayscale8)
-            self.viewer.setPhoto(QtGui.QPixmap(img))
+            img = image[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
+            img = np.flip(np.rot90(img,k=3),1).copy()
+            img = QtGui.QImage(img, img.shape[1], 
+                               img.shape[0], QtGui.QImage.Format_Grayscale8)
+            self.viewer.setPhoto(img,x,y)
             
 # =============================================================================
 #  Image Display Functions

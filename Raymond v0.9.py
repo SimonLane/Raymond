@@ -1076,7 +1076,8 @@ class Raymond(QtWidgets.QMainWindow):
             x,y,FOVx,FOVy = i[0]# x,y in pixels, FOV in um
             # image = i[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
             #convert numpy array to Qimage
-            # img = QtGui.QImage(image.data, image.shape[0], image.shape[1], QtGui.QImage.Format_Mono)
+            # img = QtGui.QImage(image.data, image.shape[0], 
+            #                       image.shape[1], QtGui.QImage.Format_Mono)
             self.Stagemap.addMark(200,50)
             self.Stagemap.centerMark()
             self.Stagemap.triggerRefresh()
