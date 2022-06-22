@@ -49,126 +49,7 @@ if sys.platform == "win32":
     from Camera_TL          import Camera_TL
     from Camera_PG          import Camera_PG
     from Stage_ASI          import Stage_ASI
-
-
-class CheckableComboBox(QtWidgets.QComboBox):
-    def __init__(self, parent = None):
-        super(CheckableComboBox, self).__init__(parent)
-        self.view().pressed.connect(self.handleItemPressed)
-        self.setModel(QtGui.QStandardItemModel(self))
-
-    def handleItemPressed(self, index):
-        item = self.model().itemFromIndex(index)
-        if item.checkState() == Qt.Checked:
-            item.setCheckState(Qt.Unchecked)
-        else:
-            item.setCheckState(Qt.Checked)
-        self.parent().GUI_to_dataframe()
-
-
-class PhotoViewer(QtWidgets.QGraphicsView):
-    photoClicked = QtCore.pyqtSignal(QtCore.QPoint)
-
-    def __init__(self, parent, calibration, w, h):
-        super(PhotoViewer, self).__init__(parent)
-        self._zoom = 0
-        self.um2px = 1/calibration
-        self.px2um = calibration
-        self.stageDim = [int(w/calibration),int(h/calibration)]
-        self.stageCen = [int(self.stageDim[0]/2),int(self.stageDim[1]/2)]
-        self._empty = True
-        self._scene = QtWidgets.QGraphicsScene(self)
-        self._scene.setSceneRect(QtCore.QRectF(0,0,self.stageDim[0],self.stageDim[1]))
-        self._photo = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(self.stageDim[0],self.stageDim[1]))
-        self._scene.addItem(self._photo)
-        
-        # add mm edge grid
-        pen = QtGui.QPen()
-        pen.setWidth(5)
-        pen.setColor(QtGui.QColor('white'))
-        for x in range(0,self.stageDim[0],int(1000*self.um2px)):
-            self._scene.addLine(x, 0, x, 200, pen)
-            self._scene.addLine(x, self.stageDim[0]-200, x,self.stageDim[0], pen)
-        for y in range(0,self.stageDim[1],int(1000*self.um2px)):
-            self._scene.addLine(0, y, 200, y, pen)
-            self._scene.addLine(0, self.stageDim[1]-200, 200, self.stageDim[1], pen)
-        
-            
-        self.setScene(self._scene)
-        self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
-        self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
-        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setBackgroundBrush(QtGui.QBrush(QtGui.QColor(30, 30, 30)))
-        self.setFrameShape(QtWidgets.QFrame.NoFrame)
-
-    def drawForeground(self, painter, rect):
-        pen = QtGui.QPen()
-        pen.setWidth(5)
-        pen.setColor(QtGui.QColor('red'))
-        # add centre lines
-        
-        self._scene.addLine(self.stageCen[0], 0, self.stageCen[0], self.stageDim[0], pen)
-        self._scene.addLine(0, self.stageCen[1], self.stageDim[1], self.stageCen[1], pen)
-
-    def hasPhoto(self):
-        return not self._empty
-
-    def fitInView(self, scale=True):
-        rect = QtCore.QRectF(self._photo.pixmap().rect())
-        if not rect.isNull():
-            self.setSceneRect(rect)
-            if self.hasPhoto():
-                unity = self.transform().mapRect(QtCore.QRectF(0, 0, 1, 1))
-                self.scale(1 / unity.width(), 1 / unity.height())
-                viewrect = self.viewport().rect()
-                scenerect = self.transform().mapRect(rect)
-                factor = min(viewrect.width() / scenerect.width(),
-                             viewrect.height() / scenerect.height())
-                self.scale(factor, factor)
-            self._zoom = 0
-
-    def mouseDoubleClickEvent(self, e):
-        clickPx = [self.mapToScene(e.x(), e.y()).x(),self.mapToScene(e.x(), e.y()).y()]
-        clickUm = [clickPx[0]*self.px2um,clickPx[1]*self.px2um]
-        print('px:', clickPx)
-        print('um:', clickUm)
-        
-    def setPhoto(self, img,x,y):
-        self._zoom = 0
-        self._empty = False
-        self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-        self._scene.addPixmap(QtGui.QPixmap(img))
-        item_list = self._scene.items()
-        item_list[0].setPos(x,y)
-        self.fitInView()
-
-    def wheelEvent(self, event):
-        if self.hasPhoto():
-            if event.angleDelta().y() > 0:
-                factor = 1.25
-                self._zoom += 1
-            else:
-                factor = 0.8
-                self._zoom -= 1
-            if self._zoom > 0:
-                self.scale(factor, factor)
-            elif self._zoom == 0:
-                self.fitInView()
-            else:
-                self._zoom = 0
-
-    def toggleDragMode(self):
-        if self.dragMode() == QtWidgets.QGraphicsView.ScrollHandDrag:
-            self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
-        elif not self._photo.pixmap().isNull():
-            self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-
-    def mousePressEvent(self, event):
-        if self._photo.isUnderMouse():
-            self.photoClicked.emit(QtCore.QPoint(event.pos()))
-        super(PhotoViewer, self).mousePressEvent(event)
-
+    from StageNavigator     import StageNavigator
 
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
@@ -522,8 +403,6 @@ class Raymond(QtWidgets.QMainWindow):
         self.tileAreaSelection.setFixedWidth(100)
         for item in self.tileAreaNames:
             self.tileAreaSelection.addItem(item)
-        
-        
 
         self.NewPButton       = QtWidgets.QPushButton('+')
         self.NewPButton.setFixedWidth(20)
@@ -542,15 +421,14 @@ class Raymond(QtWidgets.QMainWindow):
         for column in range(6):
             self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
         self.PositionListWidget.setFixedWidth(230)
+        print(1, 'stageMap parent:', self)
+        self.StageMap = StageNavigator(self, self.VF_cal, 20000,20000) #stage area in um
         
-        self.viewer = PhotoViewer(self, self.VF_cal, 20000,20000)
-        
-            
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
         self.tileScanButton.setFixedWidth(60)                                 # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
-        self.ViewFinderGroup.layout().addWidget(self.viewer,                    0,0,9,6)
+        self.ViewFinderGroup.layout().addWidget(self.StageMap,                    0,0,9,6)
         self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,6,1,2)
         self.ViewFinderGroup.layout().addWidget(self.VFModButton,               0,8,1,2)
         self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         0,9,1,2)
@@ -1107,7 +985,7 @@ class Raymond(QtWidgets.QMainWindow):
             img = np.flip(np.rot90(img,k=3),1).copy()
             img = QtGui.QImage(img, img.shape[1], 
                                img.shape[0], QtGui.QImage.Format_Grayscale8)
-            self.viewer.setPhoto(img,x,y)
+            self.StageMap.addPixmap(img,x,y)
             
 # =============================================================================
 #  Image Display Functions
@@ -1276,9 +1154,11 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Stage Position List functions
 # =============================================================================
-    def addPos(self, position=None, in_use=True, update=True):
+    def addPos(self, position=None, in_use=True, update=True, getZ=False):
         if position == None:
             position = [0,0,0]
+        if getZ and self.stage.flag_CONNECTED:
+            position[2] = self.stage.get_position()[2]
         # add a new stage position to the bottom of the list Widget,
         # self.PositionListWidget.insertItem(self.PositionListWidget.count(), str(self.PositionListWidget.count()))
         row_number = self.PositionListWidget.rowCount()
