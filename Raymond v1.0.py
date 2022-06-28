@@ -421,7 +421,6 @@ class Raymond(QtWidgets.QMainWindow):
         for column in range(6):
             self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
         self.PositionListWidget.setFixedWidth(230)
-        print(1, 'stageMap parent:', self)
         self.StageMap = StageNavigator(self, self.VF_cal, 20000,20000) #stage area in um
         
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
@@ -1154,11 +1153,12 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Stage Position List functions
 # =============================================================================
-    def addPos(self, position=None, in_use=True, update=True, getZ=False):
+    def addPos(self, position=None, in_use=True, update=True, getZ=False, group=None):
         if position == None:
             position = [0,0,0]
         if getZ and self.stage.flag_CONNECTED:
             position[2] = self.stage.get_position()[2]
+            
         # add a new stage position to the bottom of the list Widget,
         # self.PositionListWidget.insertItem(self.PositionListWidget.count(), str(self.PositionListWidget.count()))
         row_number = self.PositionListWidget.rowCount()
@@ -1181,34 +1181,46 @@ class Raymond(QtWidgets.QMainWindow):
         Z.textChanged.connect(self.positionsToDataframe)
         del_ = QtGui.QLabel('Delete')
         goto = QtGui.QLabel('Go')
-
+        #TO DO - add update position button
+        update_ = QtGui.QLabel('Update')
+        
         self.PositionListWidget.setCellWidget(row_number,  0, inUse)
         self.PositionListWidget.setCellWidget(row_number,  1, X)
         self.PositionListWidget.setCellWidget(row_number,  2, Y)
         self.PositionListWidget.setCellWidget(row_number,  3, Z)
         self.PositionListWidget.setCellWidget(row_number,  4, del_)
         self.PositionListWidget.setCellWidget(row_number,  5, goto)
+        self.PositionListWidget.setCellWidget(row_number,  6, update_)
+        
+        self.PositionList.at[row_number,'G'] = group #add stageMap group reference to the dataframe
+       
+        # store reference to the group of lines on the stage map that mark this position    
         if update: self.positionsToDataframe()
+        for r in range(row_number):
+            print('row:', r, self.PositionList.at[r,'G'])
 
     def pos_table_click(self, r,c):
         if c == 4: # delete
-            self.PositionListWidget.removeRow(r)
-            self.positionsToDataframe()
+            self.deletePos(r)
         if c == 5: # go to
             x     = float(self.PositionListWidget.cellWidget(r,1).text())
             y     = float(self.PositionListWidget.cellWidget(r,2).text())
-            z    = float(self.PositionListWidget.cellWidget(r,3).text())
-            print('move stage to position (x:%s, y:%s, z:%s)' %(x,y,z))
+            z     = float(self.PositionListWidget.cellWidget(r,3).text())
+            # print('move stage to position (x:%s, y:%s, z:%s)' %(x,y,z))
+            if self.stage.flag_CONNECTED:
+                self.stage.move_to(X=x,Y=y,Z=z)
+                #TO DO, update VF box on map
                    
-    def deletePos(self):
-        d = self.PositionListWidget.currentRow()
-        self.PositionListWidget.removeRow(d)
+    def deletePos(self, r):
+        print('deleting row:', r)
+        self.StageMap.removeMark(self.PositionList.at[r,'G']) 
+        # self.PositionListWidget.removeRow(r)
         self.positionsToDataframe()
     
-    def storeFromIndexP(self): #store index of last clicked iten in the list view
+    def storeFromIndexP(self): #store index of last clicked item in the list view
         self.PosListWidgetfromIndex = self.PositionListWidget.currentRow()
 
-    def positionsToDataframe(self):
+    def positionsToDataframe(self,group=None):
         self.PositionList = self.PositionList.iloc[0:0]
         for r in range(self.PositionListWidget.rowCount()):
             self.PositionList.at[r,'Act']    = self.PositionListWidget.cellWidget(r,0).isChecked()
@@ -1216,10 +1228,10 @@ class Raymond(QtWidgets.QMainWindow):
             self.PositionList.at[r,'Y']      = float(self.PositionListWidget.cellWidget(r,2).text())
             self.PositionList.at[r,'Z']      = float(self.PositionListWidget.cellWidget(r,3).text())
         self.positionsToDisk()  
-    
+        
     def positionsToDisk(self):
         if self.PositionList.shape[0] != 0:
-            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], columns=['Act','X','Y','Z'])
+            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], columns=['Act','X','Y','Z','G'])
         
     def loadPositions(self):
         address = QtGui.QFileDialog.getOpenFileName(self, 'Select Position Storage File', self.BasicSettings.at[0,'LastUserAddress'],
@@ -1229,7 +1241,9 @@ class Raymond(QtWidgets.QMainWindow):
             i = self.PositionList.at[r,'Act']
             p = [self.PositionList.at[r,'X'],self.PositionList.at[r,'Y'],self.PositionList.at[r,'Z']]
             self.addPos(position=p, in_use=i, update=False)
-        
+            g = self.stageMap.addMark(p[0],p[1], um=True)
+            self.PositionList.at[r,'G'] = g
+            
 # =============================================================================
 #  Experiment Builder functions
 # =============================================================================
