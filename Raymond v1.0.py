@@ -186,7 +186,7 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 
         self.ImagingSets = pd.DataFrame()   #Stores al imaging settings, populated from file stored in user folder
-        self.PositionList = pd.DataFrame()  #Stores user selected stage positions, can also be loaded from a file (in case of crash)
+        self.PositionList = pd.DataFrame(columns=['Act','X','Y','Z','G'])  #Stores user selected stage positions, can also be loaded from a file (in case of crash)
 
 # ~~~~~~~~~~~~~~~end~~~~~~~~~~~~~~
 
@@ -406,33 +406,30 @@ class Raymond(QtWidgets.QMainWindow):
 
         self.NewPButton       = QtWidgets.QPushButton('+')
         self.NewPButton.setFixedWidth(20)
-        self.DelPButton       = QtWidgets.QPushButton('-')
-        self.DelPButton.setFixedWidth(20)
+
         self.LoadPButton      = QtWidgets.QPushButton('Load')
-        self.NewPButton.released.connect(lambda: self.addPos())
-        self.DelPButton.released.connect(lambda: self.deletePos())
+        self.NewPButton.released.connect(lambda: self.addPos(position=[None,None,None]))
+
         self.LoadPButton.released.connect(self.loadPositions)
         self.PositionListWidget      = QtWidgets.QTableWidget()
-        self.PositionListWidget.itemEntered.connect(self.storeFromIndexP)
         self.PositionListWidget.cellDoubleClicked.connect(self.pos_table_click)
         self.PositionListWidget.setColumnCount(6)
-        self.PositionListWidget.setHorizontalHeaderLabels([self.tr("P"),self.tr("X"),self.tr("Y"),self.tr("Z"),self.tr(""),self.tr("")])
-        pos_column_spacing = [25,45,45,45,30,20]
+        self.PositionListWidget.setHorizontalHeaderLabels([self.tr("P"),self.tr("X"),self.tr("Y"),self.tr("Z"),self.tr(""),self.tr(""),self.tr("")])
+        pos_column_spacing = [25,45,45,45,30,20,30]
         for column in range(6):
             self.PositionListWidget.setColumnWidth(column, pos_column_spacing[column])
-        self.PositionListWidget.setFixedWidth(230)
+        self.PositionListWidget.setFixedWidth(250)
         self.StageMap = StageNavigator(self, self.VF_cal, 20000,20000) #stage area in um
         
         self.tileScanButton             = QtGui.QPushButton("Tile Scan")
         self.tileScanButton.released.connect(self.setupTileScan)
         self.tileScanButton.setFixedWidth(60)                                 # (y x h w)
         self.ViewFinderGroup.setLayout(QtGui.QGridLayout())
-        self.ViewFinderGroup.layout().addWidget(self.StageMap,                    0,0,9,6)
+        self.ViewFinderGroup.layout().addWidget(self.StageMap,                  0,0,9,6)
         self.ViewFinderGroup.layout().addWidget(self.viewFindButton,            0,6,1,2)
         self.ViewFinderGroup.layout().addWidget(self.VFModButton,               0,8,1,2)
         self.ViewFinderGroup.layout().addWidget(self.tileAreaSelection,         0,9,1,2)
         self.ViewFinderGroup.layout().addWidget(self.NewPButton,                1,6,1,1)
-        self.ViewFinderGroup.layout().addWidget(self.DelPButton,                1,7,1,1)
         self.ViewFinderGroup.layout().addWidget(self.LoadPButton,               1,8,1,1)
         self.ViewFinderGroup.layout().addWidget(self.tileScanButton,            1,9,1,1)
         self.ViewFinderGroup.layout().addWidget(self.PositionListWidget,        2,6,8,5)
@@ -631,7 +628,7 @@ class Raymond(QtWidgets.QMainWindow):
             if self.PositionList.shape[0] == 0: 
                 self.information('Imaging not possible, no stage positions selected', 'r')
                 return
-            self.positionsToDataframe()
+
             imaging_set = self.build_imaging_set()
         
             if imaging_set.shape[0] == 0:
@@ -864,36 +861,23 @@ class Raymond(QtWidgets.QMainWindow):
             # self.stage.move_to(X=xum, Y=yum )
     
     def setupTileScan(self):
-        #set stage to 'rapid mode'
-        self.stage.rapidMode(rapid=True)
-        # start live imaging on camera 3
-        self.showViewFinder()
-        # start a timer to check for signals from the worker
-        self.tileScan_timer.start()
-        #start the worker thread to control the stage
-    # To Do - update visible range to match tiled area dimensions
-        r = self.tileDisplayLimits[self.tileAreaSelection.currentIndex()]
-
-        self.tileScanThread = threading.Thread(target=self.doTileScan,
-                name="tile scan", args=())
-        self.tileScanThread.start()    
-
-    def VFum2px(self, umx,umy,FOVx,FOVy):
-        #assuming 0,0 is image bottom left
-        #shift half image size (in um)
-        umx = umx - (FOVx/2)
-        umy = umy - (FOVy/2)
-        #convert to px and shift by half stage dimension
-        pxx = (umx / self.VF_cal) + (self.stagewidth  / 2)
-        pxy = (umy / self.VF_cal) + (self.stageheight / 2)
-        return list((round(pxx),round(pxy),FOVx,FOVy))
+        if self.stage.flag_CONNECTED:
+            #set stage to 'rapid mode'
+            self.stage.rapidMode(rapid=True)
+            # start live imaging on camera 3 (if not already on)
+            if not self.liveImaging: self.showViewFinder()
+            # start a timer to check for signals from the worker
+            self.tileScan_timer.start()
+            #start the worker thread to control the stage
+        # To Do - update visible range to match tiled area dimensions
+            r = self.tileDisplayLimits[self.tileAreaSelection.currentIndex()]
     
-    def VFpx2um(self, pxx,pxy):
-        pass
-        # umx = ((pxx - 2656) / 0.231) - 1385
-        # umy = ((pxy - 2656) / -0.231) + 2217 
-        # return list((umx,umy))
-    
+            self.tileScanThread = threading.Thread(target=self.doTileScan,
+                    name="tile scan", args=())
+            self.tileScanThread.start()    
+        else:
+            self.information("Tile scan not possible, stage not connected", "r")
+
     def doTileScan(self): # Runs in thread
         tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
         fp = True
@@ -902,17 +886,17 @@ class Raymond(QtWidgets.QMainWindow):
         FOVy = round(1280 * self.VF_cal)  #um
         Xrange = FOVx*tilesX*2 #compensate for half image size
         Yrange = FOVy*tilesY
-        currentX = 0 #To do - get current stage position to use as centre of the scan
-        currentY = 0
+        X,Y,Z = self.stage.get_position()
+
         #To Do - limit scan area in line with stage limits
-        Xums = list(range(int(Xrange/-2)+int(FOVx*0.5),int(Xrange/2)+int(FOVx*0.5),FOVx)) #in microns
-        Yums = list(range(int(Yrange/-2)+int(FOVy*0.5),int(Yrange/2)+int(FOVy*0.5),FOVy)) #in microns
+        Xums = list(range(int(Xrange/-2)-int(FOVx*0.5),int(Xrange/2)+int(FOVx*0.5),FOVx)) #in microns
+        Yums = list(range(int(Yrange/-2)+int(FOVy*0),int(Yrange/2)+int(FOVy*0.5),FOVy)) #in microns
         
-        # print(self.stage.get_position())
-        currentZ = 2000 #to do - update to current Z position
+        print(self.stage.get_position())
+
         for yn, y in enumerate(Yums):
             for xn, x in enumerate(Xums):
-                self.stage.move_to(currentX + x, currentY + y, currentZ)
+                self.stage.move_to(X + x, Y + y, Z)
                 while(True):
                     time.sleep(0.1)
                     if not self.camera3.is_live or not self.stage.flag_CONNECTED:
@@ -923,7 +907,7 @@ class Raymond(QtWidgets.QMainWindow):
                     if self.stage.is_moving(): pass 
                     # TO DO - replace with TTL signal from stage
                     else:
-                        self.tileScanQ.put([self.VFum2px(x,y,FOVx,FOVy),self.VF_image])
+                        self.tileScanQ.put([[x,y,FOVx,FOVy],self.VF_image])
                         if fp: 
                             t = time.time()
                             fp = False
@@ -935,14 +919,17 @@ class Raymond(QtWidgets.QMainWindow):
         self.stage.rapidMode(rapid=False)
         print('end',time.time(), self.tileScanQ.qsize())
         print("tile scan complete: ", time.time() - t, "s")
-        # TO DO - move back to start position
-    
+        self.stage.move_to(X=X,Y=X,Z=Z) #return to centre
+        
+        
+        
     def showViewFinder(self):
         if self.camera3.flag_CONNECTED:
             if not self.liveImaging:
                 print('starting viewfinder')
                 # set exposure
-                self.camera3.exposure(4000) #To Do - make slider widget to adjust this as needed
+                self.camera3.exposure(6500) #To Do - make slider widget to adjust this as needed
+                self.camera3.gain(18)
                 self.camera3.live_mode()
                 self.frametimer.setSingleShot(False)
                 self.frametimer.timeout.connect(self.grabImageFromVF)
@@ -979,12 +966,13 @@ class Raymond(QtWidgets.QMainWindow):
     def imageToMap(self):
         if(self.tileScanQ.qsize() > 0):
             image = self.tileScanQ.get() 
-            x,y,FOVx,FOVy = image[0]# x,y in pixels, FOV in um
+            x,y,FOVx,FOVy = image[0] # in um
+            # crop and transform image
             img = image[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
             img = np.flip(np.rot90(img,k=3),1).copy()
             img = QtGui.QImage(img, img.shape[1], 
                                img.shape[0], QtGui.QImage.Format_Grayscale8)
-            self.StageMap.addPixmap(img,x,y)
+            self.StageMap.addPixmap(img,x,y) #still in um
             
 # =============================================================================
 #  Image Display Functions
@@ -1153,51 +1141,78 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 #  Stage Position List functions
 # =============================================================================
-    def addPos(self, position=None, in_use=True, update=True, getZ=False, group=None):
-        if position == None:
-            position = [0,0,0]
-        if getZ and self.stage.flag_CONNECTED:
-            position[2] = self.stage.get_position()[2]
-            
-        # add a new stage position to the bottom of the list Widget,
-        # self.PositionListWidget.insertItem(self.PositionListWidget.count(), str(self.PositionListWidget.count()))
-        row_number = self.PositionListWidget.rowCount()
-        self.PositionListWidget.insertRow(row_number)
-        self.PositionListWidget.setRowHeight(row_number, 15)
+    def addPos(self, position=[None,None,None], inuse=True, row=None): #position supplied in um
+    # get positon if not supplied
+        if self.stage.flag_CONNECTED:
+            if position[0]==None: position[0]=self.stage.get_position()[0]
+            if position[1]==None: position[1]=self.stage.get_position()[1]
+            if position[2]==None: position[2]=self.stage.get_position()[2]
+    #if row not provided, add to the end
+        if not row: row = self.PositionListWidget.rowCount() 
+        print('adding row at', row)        
+        self.PositionListWidget.insertRow(row)
+        self.PositionListWidget.setRowHeight(row, 15)
+    # generate widgets
         inUse = QtGui.QCheckBox('')
-        inUse.setChecked(bool(in_use))
-        inUse.stateChanged.connect(self.positionsToDataframe)
+        inUse.setChecked(inuse)
+        inUse.stateChanged.connect(lambda: self.updateFromWidget(row))
         X = QtGui.QLineEdit()
         X.setText('%s' %position[0])
-        # X.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[0][1],self.ASI.imaging_limits[0][0],1))
-        X.textChanged.connect(self.positionsToDataframe)
+        X.returnPressed.connect(lambda: self.updateFromWidget(row))
         Y = QtGui.QLineEdit()
         Y.setText('%s' %position[1])
-        # Y.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[1][1],self.ASI.imaging_limits[1][0],1))
-        Y.textChanged.connect(self.positionsToDataframe)
+        Y.returnPressed.connect(lambda: self.updateFromWidget(row))
         Z = QtGui.QLineEdit()
         Z.setText('%s' %position[2])
-        # Z.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[2][1],self.ASI.imaging_limits[2][0],1))
-        Z.textChanged.connect(self.positionsToDataframe)
+        Z.returnPressed.connect(lambda: self.updateFromWidget(row))
         del_ = QtGui.QLabel('Delete')
         goto = QtGui.QLabel('Go')
-        #TO DO - add update position button
         update_ = QtGui.QLabel('Update')
         
-        self.PositionListWidget.setCellWidget(row_number,  0, inUse)
-        self.PositionListWidget.setCellWidget(row_number,  1, X)
-        self.PositionListWidget.setCellWidget(row_number,  2, Y)
-        self.PositionListWidget.setCellWidget(row_number,  3, Z)
-        self.PositionListWidget.setCellWidget(row_number,  4, del_)
-        self.PositionListWidget.setCellWidget(row_number,  5, goto)
-        self.PositionListWidget.setCellWidget(row_number,  6, update_)
-        
-        self.PositionList.at[row_number,'G'] = group #add stageMap group reference to the dataframe
-       
-        # store reference to the group of lines on the stage map that mark this position    
-        if update: self.positionsToDataframe()
-        for r in range(row_number):
-            print('row:', r, self.PositionList.at[r,'G'])
+    # validate input    
+        # X.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[0][1],self.ASI.imaging_limits[0][0],1))
+        # Y.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[1][1],self.ASI.imaging_limits[1][0],1))
+        # Z.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[2][1],self.ASI.imaging_limits[2][0],1))
+    # place widgets    
+        self.PositionListWidget.setCellWidget(row,  0, inUse)
+        self.PositionListWidget.setCellWidget(row,  1, X)
+        self.PositionListWidget.setCellWidget(row,  2, Y)
+        self.PositionListWidget.setCellWidget(row,  3, Z)
+        self.PositionListWidget.setCellWidget(row,  4, del_)
+        self.PositionListWidget.setCellWidget(row,  5, goto)
+        self.PositionListWidget.setCellWidget(row,  6, update_)
+    # generate X-mark on the stage map, return reference
+        group = self.StageMap.addMark(position[0],position[1],row, um=True, checked=inuse)
+    
+    # create row in dataframe
+    # add position, and reference, to the dataframe
+        #add new row
+        self.PositionList.loc[row] = [inuse,position[0],position[1],position[2],group]
+        #reassign index
+        # self.PositionList.index = self.PositionList.index +1
+        # self.PositionList.sort_index()
+    # store to disk in case of crash
+        self.positionsToDisk()
+    # update higher indexes on the stage map
+        for r in range(row,self.PositionList.shape[0]):
+            g = self.PositionList.at[row,"G"]
+            self.StageMap.renumberPosition(g, r+1) #send group and new number
+
+
+    def updateFromWidget(self, r): # update comes through change in the text fields or checkbox
+        print('update on row:', r)
+        print('self det row:')
+        print(self.PositionListWidget.currentIndex)
+        #get data
+        a = self.PositionListWidget.cellWidget(r,0).isChecked()
+        x = float(self.PositionListWidget.cellWidget(r,1).text())
+        y = float(self.PositionListWidget.cellWidget(r,2).text())
+        z = float(self.PositionListWidget.cellWidget(r,3).text())
+        #delete old row
+        self.deletePos(r)
+        #add new row
+        self.addPos(position=[x,y,z], inuse=a, row=r)
+
 
     def pos_table_click(self, r,c):
         if c == 4: # delete
@@ -1210,39 +1225,40 @@ class Raymond(QtWidgets.QMainWindow):
             if self.stage.flag_CONNECTED:
                 self.stage.move_to(X=x,Y=y,Z=z)
                 #TO DO, update VF box on map
+        if c == 6: # update
+            pass
                    
     def deletePos(self, r):
         print('deleting row:', r)
+        # remove marks from the stage view
         self.StageMap.removeMark(self.PositionList.at[r,'G']) 
-        # self.PositionListWidget.removeRow(r)
-        self.positionsToDataframe()
-    
-    def storeFromIndexP(self): #store index of last clicked item in the list view
-        self.PosListWidgetfromIndex = self.PositionListWidget.currentRow()
-
-    def positionsToDataframe(self,group=None):
-        self.PositionList = self.PositionList.iloc[0:0]
-        for r in range(self.PositionListWidget.rowCount()):
-            self.PositionList.at[r,'Act']    = self.PositionListWidget.cellWidget(r,0).isChecked()
-            self.PositionList.at[r,'X']      = float(self.PositionListWidget.cellWidget(r,1).text())
-            self.PositionList.at[r,'Y']      = float(self.PositionListWidget.cellWidget(r,2).text())
-            self.PositionList.at[r,'Z']      = float(self.PositionListWidget.cellWidget(r,3).text())
-        self.positionsToDisk()  
-        
+        # remove the item from position list widget
+        self.PositionListWidget.removeRow(r)
+        # remove item from the position list dataframe
+        self.PositionList = self.PositionList.drop([r])
+        #reindex dataframe
+        self.PositionList = self.PositionList.reset_index(drop=True)
+        for row in range(r,self.PositionList.shape[0]):
+            g = self.PositionList.at[row,"G"]
+            self.StageMap.renumberPosition(g, row+1) #send group and new number
+            
     def positionsToDisk(self):
         if self.PositionList.shape[0] != 0:
-            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], columns=['Act','X','Y','Z','G'])
+            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], 
+                                       )#columns=['Act','X','Y','Z','G'])
+            
         
     def loadPositions(self):
+        # to do - delete all current rows, or option to append?
         address = QtGui.QFileDialog.getOpenFileName(self, 'Select Position Storage File', self.BasicSettings.at[0,'LastUserAddress'],
                                                     "All files (lastStagePositions.xlsx stagePositions.xlsx)")
         self.PositionList = pd.read_excel(address[0], index_col=0)
         for r in range(self.PositionList.shape[0]):
             i = self.PositionList.at[r,'Act']
-            p = [self.PositionList.at[r,'X'],self.PositionList.at[r,'Y'],self.PositionList.at[r,'Z']]
-            self.addPos(position=p, in_use=i, update=False)
-            g = self.stageMap.addMark(p[0],p[1], um=True)
-            self.PositionList.at[r,'G'] = g
+            p = [self.PositionList.at[r,'X'],self.PositionList.at[r,'Y'],
+                 self.PositionList.at[r,'Z']]
+            self.addPos(position=p, inuse=i, row=r)
+
             
 # =============================================================================
 #  Experiment Builder functions
@@ -1468,8 +1484,6 @@ class Raymond(QtWidgets.QMainWindow):
     
     def closeEvent(self, event): #to do upon GUI being closed
         self.frametimer.stop()
-        self.saveDataFrame()
-        self.positionsToDisk()
         # TO DO - print warning if the imaging thread is still running
         active_threads = threading.enumerate()
         # print(active_threads)
@@ -1480,7 +1494,9 @@ class Raymond(QtWidgets.QMainWindow):
             self.TLsdk.dispose()
             self.camera3.close()
             self.stage.close()
-    
+        self.saveDataFrame()
+        self.positionsToDisk()
+        
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     gui = Raymond()

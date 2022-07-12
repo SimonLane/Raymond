@@ -19,28 +19,19 @@ class StageNavigator(QtWidgets.QGraphicsView):
         self._empty = True
         self.stageScene = QtWidgets.QGraphicsScene(self)
         self.stageScene.setSceneRect(QtCore.QRectF(0,0,self.stageDim[0],self.stageDim[1]))
-        self.stagePixmap = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(self.stageDim[0],self.stageDim[1]))
-        self.stageScene.addItem(self.stagePixmap)
-        
-        # add mm edge grid
-        pen = QtGui.QPen()
-        pen.setWidth(5)
-        pen.setColor(QtGui.QColor('white'))
-        for x in range(0,self.stageDim[0],int(1000*(1/self.calibration))):
-            self.stageScene.addLine(x, 0, x, 200, pen)
-            self.stageScene.addLine(x, self.stageDim[0]-200, x,self.stageDim[0], pen)
-        for y in range(0,self.stageDim[1],int(1000*(1/self.calibration))):
-            self.stageScene.addLine(0, y, 200, y, pen)
-            self.stageScene.addLine(0, self.stageDim[1]-200, 200, self.stageDim[1], pen)
-        
-            
         self.setScene(self.stageScene)
+        self.stagePixmap = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap(self.stageDim[0],self.stageDim[1]))
+        self.offset = [0,-640] #offset in pixels to map to the real stage
+       
+        
+
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setBackgroundBrush(QtGui.QBrush(QtGui.QColor(30, 30, 30)))
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.fitInView()
 
     def drawForeground(self, painter, rect):
         pen = QtGui.QPen()
@@ -49,8 +40,9 @@ class StageNavigator(QtWidgets.QGraphicsView):
         # add centre lines
         self.stageScene.addLine(self.stageCen[0], 0, self.stageCen[0], self.stageDim[0], pen)
         self.stageScene.addLine(0, self.stageCen[1], self.stageDim[1], self.stageCen[1], pen)
-
-    def fitInView(self, scale=True):
+        
+        
+    def fitInView(self, rect=None, scale=True):
         rect = QtCore.QRectF(self.stagePixmap.pixmap().rect())
         if not rect.isNull():
             self.setSceneRect(rect)
@@ -71,20 +63,12 @@ class StageNavigator(QtWidgets.QGraphicsView):
         xPx, yPx = int(self.mapToScene(e.x(), e.y()).x()), int(self.mapToScene(e.x(), e.y()).y())
         xUm, yUm = self.px2um(xPx), self.px2um(yPx)
         if e.button() == 4: #middle button
-            # print('middle click')
-            # print('px:', xPx, yPx)
-            # print('um:', xUm, yUm)
-            # add mark to StageMap
-            g = self.addMark(xPx,yPx)
             # add position to position List
-            self.Raymond.addPos(position = [xUm,yUm,0], getZ=True, group=g)
+            self.Raymond.addPos(position = [xUm,yUm,None], inuse=True)
     
     def mouseDoubleClickEvent(self, e):
         xPx, yPx = int(self.mapToScene(e.x(), e.y()).x()), int(self.mapToScene(e.x(), e.y()).y())
         xUm, yUm = self.px2um(xPx), self.px2um(yPx)
-        # print('double click')
-        # print('px:', xPx, yPx)
-        # print('um:', xUm, yUm)
         self.Raymond.stage.move_to(X=xUm, Y=yUm)
         
     def um2px(self, um):
@@ -93,47 +77,56 @@ class StageNavigator(QtWidgets.QGraphicsView):
     def px2um(self, px):
         return int(-10000 + (px * self.calibration))
     
-    def addMark(self,x,y, um=False):
+    def addMark(self,x,y,r, um=False, checked=True):
+        print('add mark', r)
         pen = QtGui.QPen()
         pen.setWidth(10)
-        pen.setColor(QtGui.QColor('red'))
+        if checked: pen.setColor(QtGui.QColor('#FF0000'))
+        else:       pen.setColor(QtGui.QColor('#888888'))
         
         if um:        #if position supplied in um, convert to pixels
             x = self.um2px(x)
             y = self.um2px(y)
-        # print('adding:', x,y, 'px')
+
         g = self.stageScene.createItemGroup([])
         
         for l in [[-100,-100],[+100,-100],[-100,+100],[+100,+100]]: 
-            a = self.stageScene.addLine(x+l[0],y+l[1],x+l[0]/2,y+l[1]/2,pen)
+            a = self.scene().addLine(x+l[0],y+l[1],x+l[0]/2,y+l[1]/2,pen)
             a.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
+            # a.setZValue(10)
             g.addToGroup(a)
 
-        r = self.Raymond.PositionListWidget.rowCount()
-        print('added row',r)
+        print('added mark',r)
         ti = QtGui.QGraphicsTextItem()
         ti.setHtml('<p style="color:red; font: 100px;">%s</p>' %int(r+1))
-        
+        # ti.setZValue(10)
         ti.setPos(x-180,y-220)
+        ti.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
+        print("ti:", ti)
         g.addToGroup(ti)
-        
         return g
-    
-        
+
     def removeMark(self, g):
-        print(g)
+        print('remove mark', g)
         for item in g.childItems():
             self.stageScene.removeItem(item)
-        self.stageScene.destroyItemGroup(g)
+        self.stageScene.destroyItemGroup(g) # try not deleting the group so positons in memory don't change
 
-    def addPixmap(self, img,x,y):
+    def renumberPosition(self, group, number):
+        print('renumbering',number)
+        ti = group.childItems()[4]
+        ti.setHtml('<p style="color:red; font: 100px;">%s</p>' %int(number))
+
+        
+        
+    def addPixmap(self, img,x,y): #in um
         self.zoom = 0
         self._empty = False
         self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-        self.stageScene.addPixmap(QtGui.QPixmap(img))
-        item_list = self.stageScene.items()
-        item_list[0].setPos(x,y)
-        self.fitInView()
+        a = self.stageScene.addPixmap(QtGui.QPixmap(img))
+        a.setPos(self.um2px(x)+self.offset[0],self.um2px(y)+self.offset[1]) #in px
+        a.setZValue(-1)
+        #self.fitInView() #turn on to resize the view when doing tile scan
         
     def wheelEvent(self, event):
         if not self._empty:
@@ -155,8 +148,3 @@ class StageNavigator(QtWidgets.QGraphicsView):
             self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
         elif not self.stagePixmap.pixmap().isNull():
             self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-
-    # def mousePressEvent(self, event):
-    #     if self.stagePixmap.isUnderMouse():
-    #         self.mapClicked.emit(QtCore.QPoint(event.pos()))
-    #     super(StageNavigator, self).mousePressEvent(event)
