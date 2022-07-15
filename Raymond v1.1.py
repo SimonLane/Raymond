@@ -1,31 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May  5 16:06:56 2021
-v0.1
-    Contains a dataframe for holding the experiment imaging parameters, and a ListWidget 
-    for displaying the settings. Drag and Drop implemented to allow re-ordering of the
-    different imaging sets
-v0.2
-    Added image viewer window and implemented live view from the Thorlabs camera 
-    and the Chameleon camera
-v0.3
-    DONE
-        get display settings working
-        Add Timing, file controls
-        Add information panel
-        Create a separate panel or window for tile scan, allow zoom?
-        display a map of the imaging area, with various settings
-        User dependant config files
-        laser power settings into experiment builder and into data structure
+Created on Wed July 13 2022
+
+v1.1
+    
     TO-DO
+    
+        create new class for a 'position'
+        Holds   -the coordinates of an imaging point (um)
+                -the widgets that appear in the QTableWidget
+                -the coordinates of the mark on the map (px)
+                -the index of the position
+                -the group of lines and text for the mark
         Create Connection indicator - currently output to the info log
-        Save all settings to config file, not just the experiment builder
         Add GUI section for environmental information
         Add GUI section for Rayleigh image processing options
-        Add GUI section for locations, and button to load in saved locations
         Load calibration file for laser powers
-        
-        On start Expt. output a file (to the experiment directory) with all the imaging parameters and stage positions as an excel file
         Ability to load back the settings and/or positions
         
         
@@ -46,10 +36,11 @@ from scipy.ndimage.filters import gaussian_filter
 if sys.platform == "win32":
     from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
 # my classes
-    from Camera_TL          import Camera_TL
-    from Camera_PG          import Camera_PG
-    from Stage_ASI          import Stage_ASI
-    from StageNavigator     import StageNavigator
+    from Camera_TL           import Camera_TL
+    from Camera_PG           import Camera_PG
+    from Stage_ASI           import Stage_ASI
+    from StageNavigator      import StageNavigator
+    from stagePositionClass import ImagingLocation
 
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
@@ -129,6 +120,7 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 # End editable properties      
 # =============================================================================
+        self.locationID = -1        
         self.userList= []               # List of valid users, created at startup from list of folders in the save root directory 
         if sys.platform == "win32":
             self.user_directory = 'D:'
@@ -185,9 +177,11 @@ class Raymond(QtWidgets.QMainWindow):
 # Data Structures
 # =============================================================================
 
-        self.ImagingSets = pd.DataFrame()   #Stores al imaging settings, populated from file stored in user folder
-        self.PositionList = pd.DataFrame(columns=['Act','X','Y','Z','G'])  #Stores user selected stage positions, can also be loaded from a file (in case of crash)
-
+        #Stores al imaging settings, populated from file stored in user folder
+        self.ImagingSets = pd.DataFrame()
+        #Stores user selected stage positions, can also be loaded from a file (in case of crash)
+        self.PositionList = [] 
+        
 # ~~~~~~~~~~~~~~~end~~~~~~~~~~~~~~
 
 # build the UI
@@ -1142,64 +1136,23 @@ class Raymond(QtWidgets.QMainWindow):
 #  Stage Position List functions
 # =============================================================================
     def addPos(self, position=[None,None,None], inuse=True, row=None): #position supplied in um
-    # get positon if not supplied
-        print('add received: ', row)
-        if self.stage.flag_CONNECTED:
-            if position[0]==None: position[0]=self.stage.get_position()[0]
-            if position[1]==None: position[1]=self.stage.get_position()[1]
-            if position[2]==None: position[2]=self.stage.get_position()[2]
-    #if row not provided, add to the end
-        if row == None: row = self.PositionListWidget.rowCount() 
-        print('adding row at', row)        
-        self.PositionListWidget.insertRow(row)
-        self.PositionListWidget.setRowHeight(row, 15)
-    # generate widgets
-        index = QtCore.QPersistentModelIndex(self.PositionListWidget.model().index(row, 1)) # this keeps track of the widget positions, even when rows get moved
-        
-        inUse = QtGui.QCheckBox('')
-        inUse.setChecked(inuse)
-        inUse.stateChanged.connect(lambda *args, index=index: self.updateFromWidget(index)) # force index to update before calling 
-        X = QtGui.QLineEdit()
-        X.setText('%s' %position[0])
-        X.returnPressed.connect(lambda *args, index=index: self.updateFromWidget(index))
-        Y = QtGui.QLineEdit()
-        Y.setText('%s' %position[1])
-        Y.returnPressed.connect(lambda *args, index=index: self.updateFromWidget(index))
-        Z = QtGui.QLineEdit()
-        Z.setText('%s' %position[2])
-        Z.returnPressed.connect(lambda *args, index=index: self.updateFromWidget(index))
-        del_ = QtGui.QLabel('Delete')
-        goto = QtGui.QLabel('Go')
-        update_ = QtGui.QLabel('Update')
-        
-    # validate input    
-        # X.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[0][1],self.ASI.imaging_limits[0][0],1))
-        # Y.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[1][1],self.ASI.imaging_limits[1][0],1))
-        # Z.setValidator(QtGui.QDoubleValidator(self.ASI.imaging_limits[2][1],self.ASI.imaging_limits[2][0],1))
-    # place widgets    
-        self.PositionListWidget.setCellWidget(row,  0, inUse)
-        self.PositionListWidget.setCellWidget(row,  1, X)
-        self.PositionListWidget.setCellWidget(row,  2, Y)
-        self.PositionListWidget.setCellWidget(row,  3, Z)
-        self.PositionListWidget.setCellWidget(row,  4, del_)
-        self.PositionListWidget.setCellWidget(row,  5, goto)
-        self.PositionListWidget.setCellWidget(row,  6, update_)
-    # generate X-mark on the stage map, return reference
-        group = self.StageMap.addMark(position[0],position[1],row, um=True, checked=inuse)
+        print('add received: ', row)        
+    # create new instance for imaging location
+        IL = ImagingLocation(self, self.VF_cal, self.StageMap)
+        IL.addPosition(position[0],position[1],position[2],None)
+        IL.ID = self.getLocationID()
+    #clear table
     
-    # create row in dataframe
-    # add position, and reference, to the dataframe
-        #add new row
-        self.PositionList.loc[row] = [inuse,position[0],position[1],position[2],group]
-        #reassign index
-        # self.PositionList.index = self.PositionList.index +1
-        # self.PositionList.sort_index()
+    #add to position list
+        self.PositionList.insert(IL.index, IL)
+        for i, item in enumerate(self.PositionList):
+            # update index and mark
+            item.updateIndex(i)
+            # rebuild table from position list
+            
+    
     # store to disk in case of crash
         self.positionsToDisk()
-    # update higher indexes on the stage map
-        for r in range(row,self.PositionList.shape[0]):
-            g = self.PositionList.at[row,"G"]
-            self.StageMap.renumberPosition(g, r+1) #send group and new number
 
 
     def updateFromWidget(self, ir): # update comes through change in the text fields or checkbox
@@ -1248,10 +1201,13 @@ class Raymond(QtWidgets.QMainWindow):
             self.StageMap.renumberPosition(g, row+1) #send group and new number
             
     def positionsToDisk(self):
-        if self.PositionList.shape[0] != 0:
-            self.PositionList.to_excel('%slastStagePositions.xlsx' %self.BasicSettings.at[0,'LastUserAddress'], 
-                                       )#columns=['Act','X','Y','Z','G'])
+        if len(self.PositionList) > 0:
             
+            for item in self.PositionList:
+                print('fake saving position:',item.Xum, item.Yum, item.Zum)
+            
+        
+        
         
     def loadPositions(self):
         # to do - delete all current rows, or option to append?
@@ -1264,7 +1220,10 @@ class Raymond(QtWidgets.QMainWindow):
                  self.PositionList.at[r,'Z']]
             self.addPos(position=p, inuse=i, row=r)
 
-            
+    def getLocationID(self):
+        self.locationID =+1
+        return self.locationID
+        
 # =============================================================================
 #  Experiment Builder functions
 # =============================================================================

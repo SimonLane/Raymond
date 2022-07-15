@@ -102,7 +102,6 @@ class StageNavigator(QtWidgets.QGraphicsView):
         # ti.setZValue(10)
         ti.setPos(x-180,y-220)
         ti.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
-        print("ti:", ti)
         g.addToGroup(ti)
         return g
 
