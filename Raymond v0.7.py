@@ -172,7 +172,6 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
         self.tileScanQ = queue.Queue()
         self.tileScanQChecker = QtCore.QTimer()
-        self.tileScanQChecker = QtCore.QTimer()
         self.tileScanQChecker.setInterval(10)
         self.tileScanQChecker.timeout.connect(self.imageToMap)
 

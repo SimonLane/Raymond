@@ -27,7 +27,7 @@ FUTURE VERSION
 """
 
 #imports
-import              sys, pickle, time, datetime, threading , Queue, os, math, glob, ctypes
+import              sys, pickle, time, datetime, threading, Queue, os, math, glob, ctypes
 import pyqtgraph    as pg
 import pandas       as pd
 import numpy        as np
