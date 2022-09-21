@@ -8,8 +8,9 @@ Created on Fri Dec 10 16:06:20 2021
 
 import sys, time, glob, serial
 
-from PyQt5 import QtGui, QtWidgets, QtCore
-
+from PyQt5 import QtGui
+from PyQt5 import QtWidgets
+from PyQt5 import QtCore
 
 class laser_line():
     def __init__(self, parent, wavelength, minSP, maxSP, control_type, calibration):

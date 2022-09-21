@@ -67,7 +67,8 @@ class Camera_PG(QtGui.QWidget):
         
     def gain(self, g):
         g = float(g) #camera requires a double
-    # to do
+        if g>18: g = 18.0
+        self.camera.Gain.SetValue(g) 
     
     def get_exposure(self):
         return int(self.camera.ExposureTime())
