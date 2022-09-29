@@ -2,6 +2,26 @@
 #define ETL Serial1
 #include <SPI.h>
 
+//definitions, flags etc.
+
+long unsigned prev_t    = 0;
+bool scan_when_ready    = false;
+bool filter_flag        = false;
+bool camera_flag        = false;
+bool laser_flag         = false;
+bool z_flag             = false;
+bool y_flag             = false;
+bool in_scan            = false;
+int filter_pin          = 0; 
+int camera_pin          = 0; 
+int laser_pin           = 0; 
+int z_pin               = 0; 
+int y_pin               = 0; 
+int z_separation        = 1;
+int z_number            = 50;
+int z_start             = 0;
+int exposure            = 10;
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ETL functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 int ETL_offset = 0;
@@ -49,7 +69,7 @@ void ETLto(int p){
   p = p + ETL_offset;
 //fp range is 700 to 1700 (-1.5 to 3.5 diopters)
   
-  if(p<700 || p>1700){return false;} //out of range check
+  if(p<700 || p>1700){return;} //out of range check
 //template command structure, 10 bytes:
   //  P       w       C         A         FH FL   0   0   CS1  CS2
   // "Power"  write   Control   Channel   focus   dummy   checksum
@@ -62,7 +82,7 @@ void ETLto(int p){
   focus_output_[8] = CS & 0xFF;   //break CS into two bytes, and reverse the order
   focus_output_[9] = CS>>8; 
 //write the binary data to the ETL
-  for(int i;i<10;i++){ETL.write(focus_output_[i]);}
+  for(int i=0;i<10;i++){ETL.write(focus_output_[i]);}
 }
 
 void ETLoffset(int OS){
@@ -184,7 +204,7 @@ void respond(String device,String command1, String command2, String command3, St
         setFilter(command1.toInt()); filter_flag = false;
         exposure        = command2.toInt();
         z_start         = command3.toInt();
-        setZ(z_start); Zflag = false;
+        setZ(z_start); z_flag = false;
         z_number        = command4.toInt();
         z_separation    = command5.toInt(); 
     }//Scan command
@@ -219,57 +239,23 @@ void setup() {
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ main loop ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-long unsigned prev_t    = 0;
-bool scan_when_ready    = false;
-bool filter_flag        = false;
-bool camera_flag        = false;
-bool laser_flag         = false;
-bool z_flag             = false;
-bool y_flag             = false;
-bool in scan            = false;
-int filter_pin          = 0; 
-int camera_pin          = 0; 
-int laser_pin           = 0; 
-int z_pin               = 0; 
-int y_pin               = 0; 
-
 void loop() {
-checkSerial();
-if(scan_when_ready){ //scan command received and hardware set in motion. 
-                     //Monitor until all devices signal they are ready
-if(digitalRead(filter_pin)) {filter_flag = true;}
-if(digitalRead(camera_pin)) {camera_flag = true;}
-if(digitalRead(laser_pin)   {laser_flag = true;}
-if(digitalRead(z_pin))      {z_flag = true;}
-if(digitalRead(y_pin))      {y_flag = true;}
-
-
-
-}
+  checkSerial();
+  if(scan_when_ready){ //scan command received and hardware set in motion. 
+                       //Monitor until all devices signal they are ready
+    if(digitalRead(filter_pin)) {filter_flag = true;}
+    if(digitalRead(camera_pin)) {camera_flag = true;}
+    if(digitalRead(laser_pin))  {laser_flag = true;}
+    if(digitalRead(z_pin))      {z_flag = true;}
+    if(digitalRead(y_pin))      {y_flag = true;}
+    }
 
 //  periodic maintanence tasks and status reports here
-if(millis() > prev_t + 100 && in_scan == false){
+  if(millis() > prev_t + 100 && in_scan == false){
   prev_t = millis();
-
   }
 }
-//~~~~~~~~~~~~~~~~~~~~~~~~~~ scan prep functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void setZ(int z){}//to do, set Z position on ETL
+void setFilter(int f){}//to do, set Filter position on illumination board

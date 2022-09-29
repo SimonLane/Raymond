@@ -6,10 +6,30 @@ Created on Wed Jul 13 15:50:16 2022
 """
 
 
-from PyQt5 import QtGui, QtWidgets, QtCore
+from PyQt5 import QtGui, QtCore
+
+class QDoublePushButton(QtGui.QPushButton):
+    doubleClicked = QtCore.pyqtSignal()
+    clicked = QtCore.pyqtSignal()
+
+    def __init__(self, *args, **kwargs):
+        QtGui.QPushButton.__init__(self, *args, **kwargs)
+        self.timer = QtCore.QTimer()
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.clicked.emit)
+        super().clicked.connect(self.checkDoubleClick)
+
+    @QtCore.pyqtSlot()
+    def checkDoubleClick(self):
+        if self.timer.isActive():
+            self.doubleClicked.emit()
+            self.timer.stop()
+        else:
+            self.timer.start(250)
 
 class ImagingLocation(QtGui.QWidget):
     def um2px(self, um):
+        print(um, '!')
         return int((um + 10000) * (1/self.calibration))
     
     def px2um(self, px):
@@ -32,17 +52,17 @@ class ImagingLocation(QtGui.QWidget):
          
         self.index = None
         self.active = True
-        self.ID = None
+        self.ID = self.parent().getLocationID()
         self.markGroup = self.scene.createItemGroup([])
         self.markNumber = QtGui.QGraphicsTextItem()
     # build widgets
-        self.Xedit = QtGui.QLineEdit()
-        self.Yedit = QtGui.QLineEdit()
-        self.Zedit = QtGui.QLineEdit()
-        self.inUse = QtGui.QCheckBox('')
-        self.del_ = QtGui.QDoublePushButton('Delete')
-        self.goto = QtGui.QDoublePushButton('Go')
-        self.update_ = QtGui.QDoublePushButton('Update')
+        self.Xedit      = QtGui.QLineEdit()
+        self.Yedit      = QtGui.QLineEdit()
+        self.Zedit      = QtGui.QLineEdit()
+        self.inUse      = QtGui.QCheckBox('')
+        self.del_       = QDoublePushButton('Delete')
+        self.goto       = QDoublePushButton('Go')
+        self.update_    = QDoublePushButton('Update')
         self.inUse.setChecked(self.active)
         self.inUse.stateChanged.connect(self.updatePosition)  
         self.Xedit.returnPressed.connect(self.updatePosition)
@@ -52,11 +72,16 @@ class ImagingLocation(QtGui.QWidget):
         self.goto.doubleClicked.connect(self.move_stage)
         self.update_.doubleClicked.connect(self.updateButtonClick)
     # validate input    
-        self.Xedit.setValidator(QtGui.QDoubleValidator(self.parent().ASI.imaging_limits[0][1],self.parent().ASI.imaging_limits[0][0],1))
-        self.Yedit.setValidator(QtGui.QDoubleValidator(self.parent().ASI.imaging_limits[1][1],self.parent().ASI.imaging_limits[1][0],1))
-        self.Zedit.setValidator(QtGui.QDoubleValidator(self.parent().ASI.imaging_limits[2][1],self.parent().ASI.imaging_limits[2][0],1))
+        self.Xedit.setValidator(QtGui.QDoubleValidator(self.parent().stage.imaging_limits[0][1],self.parent().stage.imaging_limits[0][0],1))
+        self.Yedit.setValidator(QtGui.QDoubleValidator(self.parent().stage.imaging_limits[1][1],self.parent().stage.imaging_limits[1][0],1))
+        self.Zedit.setValidator(QtGui.QDoubleValidator(self.parent().stage.imaging_limits[2][1],self.parent().stage.imaging_limits[2][0],1))
 
+    def move_stage(self):
+        self.parent().stage.move_to(X=self.Xum, Y=self.Yum, Z=self.Zum)
         
+
+    
+    
     def updatePosition(self): # handles changes to the text fields and checkbox
         # get and store new values
         self.active = self.inUse.isChecked()
@@ -83,17 +108,17 @@ class ImagingLocation(QtGui.QWidget):
         self.markNumber.setHtml('<p style="color:red; font: 90px;">%s</p>' %int(self.index+1))
         
     def addLocation(self,x,y,z,r, um=False, checked=True):
-        print('add location', x,y,z,r,'in um:, um', 'active:', checked)
+        
     # get unique ID
-        self.ID = self.parent().getlocationID()
+        
         print('unique ID:', self.ID)
     
-    #get position
+    # get position
         if self.parent().stage.flag_CONNECTED and um:
-            position = self.parent().stage.getPosition()
-            if x==None: position[0]=self.parent().stage.get_position()[0]
-            if y==None: position[1]=self.parent().stage.get_position()[1]
-            if z==None: position[2]=self.parent().stage.get_position()[2]
+            position = self.parent().stage.get_position()
+            if x==None: x=self.parent().stage.get_position()[0]
+            if y==None: y=self.parent().stage.get_position()[1]
+            if z==None: z=self.parent().stage.get_position()[2]
 
     # interchange units
         if um:                  #if position supplied in um, convert to pixels
@@ -107,6 +132,7 @@ class ImagingLocation(QtGui.QWidget):
             self.Xpx = x
             self.Ypx = y
             
+        print('add location', x,y,z,r,'in um:', um, 'active:', checked)    
     # get index
         if r == None: self.index = self.parent().PositionListWidget.rowCount() 
         else: self.index = r
@@ -124,12 +150,12 @@ class ImagingLocation(QtGui.QWidget):
 
     # build mark
         for l in [[-100,-100],[+100,-100],[-100,+100],[+100,+100]]: 
-            a = self.scene().addLine(l[0],l[1],l[0]/2,l[1]/2,self.pen)
+            a = self.scene.addLine(l[0],l[1],l[0]/2,l[1]/2,self.pen)
             a.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
-            self.markGroupg.addToGroup(a)
+            self.markGroup.addToGroup(a)
         ti = QtGui.QGraphicsTextItem()
         ti.setHtml('<p style="color:red; font: 90px;">%s</p>' %int(self.index+1))
-        ti.setPos(180,220)
+        ti.setPos(120,120)
         ti.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
         self.markGroup.addToGroup(ti)
         self.markGroup.setPos(self.Xpx,self.Ypx)
@@ -137,13 +163,13 @@ class ImagingLocation(QtGui.QWidget):
     # add widgets to table
         self.parent().PositionListWidget.insertRow(self.index)
         self.parent().PositionListWidget.setRowHeight(self.index, 15)
-        self.PositionListWidget.setCellWidget(self.index,  0, self.inUse)
-        self.PositionListWidget.setCellWidget(self.index,  1, self.Xedit)
-        self.PositionListWidget.setCellWidget(self.index,  2, self.Yedit)
-        self.PositionListWidget.setCellWidget(self.index,  3, self.Zedit)
-        self.PositionListWidget.setCellWidget(self.index,  4, self.del_)
-        self.PositionListWidget.setCellWidget(self.index,  5, self.goto)
-        self.PositionListWidget.setCellWidget(self.index,  6, self.update_)
+        self.parent().PositionListWidget.setCellWidget(self.index,  0, self.inUse)
+        self.parent().PositionListWidget.setCellWidget(self.index,  1, self.Xedit)
+        self.parent().PositionListWidget.setCellWidget(self.index,  2, self.Yedit)
+        self.parent().PositionListWidget.setCellWidget(self.index,  3, self.Zedit)
+        self.parent().PositionListWidget.setCellWidget(self.index,  4, self.del_)
+        self.parent().PositionListWidget.setCellWidget(self.index,  5, self.goto)
+        self.parent().PositionListWidget.setCellWidget(self.index,  6, self.update_)
         
         
         
@@ -156,21 +182,3 @@ class ImagingLocation(QtGui.QWidget):
             self.stageScene.removeItem(item)
         self.stageScene.destroyItemGroup(g) 
         
-class QDoublePushButton(QtGui.QPushButton):
-    doubleClicked = QtCore.pyqtSignal()
-    clicked = QtCore.pyqtSignal()
-
-    def __init__(self, *args, **kwargs):
-        QtGui.QPushButton.__init__(self, *args, **kwargs)
-        self.timer = QtCore.QTimer()
-        self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self.clicked.emit)
-        super().clicked.connect(self.checkDoubleClick)
-
-    @QtCore.pyqtSlot()
-    def checkDoubleClick(self):
-        if self.timer.isActive():
-            self.doubleClicked.emit()
-            self.timer.stop()
-        else:
-            self.timer.start(250)

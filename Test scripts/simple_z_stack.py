@@ -64,47 +64,51 @@ def move_rel(X=None,Y=None,Z=None):
         if Z is not None: 
             string = string + ' Z=%s' %(round(Z*10,1))
         string = string + '\r'
-        # ASI.write(string.encode())
-        # ASI.readline()
+        ASI.write(string.encode())
+        ASI.readline()
         print('sent to ASI:', string)
 
-
-
-
-# Instalise Camera  
-TLsdk = TLCameraSDK()
-TLcameras = TLsdk.discover_available_cameras()
-camera = TLsdk.open_camera(TLcameras[0])
 
 #  Instalise Stage
 ASI = serial.Serial(port=port, baudrate=115200, timeout=0.2)
 sleep(0.3)
+# temporary test
+for i in range(100):
+    move_rel(Y=-1)
+    sleep(0.1)
 
 
-
-
-binning(b)
-exposure(e)
-hot_pixel_correction(True)
-grab_mode()
-for i in range(n):
-    camera.issue_software_trigger()
-    sleep(float(camera.frame_time_us/1000000.0))
-    frame = getFrame()
-    if frame:
-        print('n frames: ', frame.frame_count)
-        image = np.copy(frame.image_buffer)
-     # save image to disk
-        # image = reshape(image, (1080,1920))
-        imageio.imwrite('%s%s.tif' %(save_location,i), image)
-        # move stage
-        move_rel(Z=z_sep)
-        sleep(sd)
+# Instalise Camera  
+# TLsdk = TLCameraSDK()
+# TLcameras = TLsdk.discover_available_cameras()
+# camera = TLsdk.open_camera(TLcameras[0])
 
 
 
 
 
-camera.dispose()
-TLsdk.dispose()
+# binning(b)
+# exposure(e)
+# hot_pixel_correction(True)
+# grab_mode()
+# for i in range(n):
+#     camera.issue_software_trigger()
+#     sleep(float(camera.frame_time_us/1000000.0))
+#     frame = getFrame()
+#     if frame:
+#         print('n frames: ', frame.frame_count)
+#         image = np.copy(frame.image_buffer)
+#      # save image to disk
+#         # image = reshape(image, (1080,1920))
+#         imageio.imwrite('%s%s.tif' %(save_location,i), image)
+#         # move stage
+#         move_rel(Z=z_sep)
+#         sleep(sd)
+
+
+
+
+
+# camera.dispose()
+# TLsdk.dispose()
 ASI.close()
