@@ -54,9 +54,12 @@ int active_wavelength;
 int shutter_open = 0;
 int shutter_close = 0;
 int safe_position = 2100;
+bool galvo_override = false;
+
 void respond(String,String,String);
 void setChannel(int, int);
 void setAlltoZero();
+void galvo_to(int, int);
 
 class Laser{
   public:
@@ -65,7 +68,6 @@ class Laser{
   int digital_channel;
   int minimum;
   int maximum;
-  float calibration;
   int galvo_on; //position
   int galvo_off;//position
   int galvo_pin;
@@ -74,13 +76,12 @@ class Laser{
   
 
   public:
-  Laser(int wav, int ach, int dch, int mi, int ma, int cal, int gon, int goff){
+  Laser(int wav, int ach, int dch, int mi, int ma, int gon, int goff){
     wavelength = wav;
     analog_channel = ach;
     digital_channel = dch;
     minimum = mi;
     maximum = ma;
-    calibration = cal;
     galvo_on = gon;
     galvo_off = goff;
     galvo_pin = A21;
@@ -101,14 +102,13 @@ class Laser{
     }
   }
 
-  void power(int p){ //receive as percentage
-    power_percentage = p;
-    power_value = map(p,0,100,minimum,maximum);
+  void power(int v16){ //receive as 16-bit value
+    power_value = v16;
     if(verbose){
       Serial.print("mode: ");Serial.println(mode);
       Serial.print("wav: ");Serial.println(wavelength);
       Serial.print("active wav: ");Serial.println(::active_wavelength);
-      Serial.print("power: ");Serial.print(power_percentage);Serial.print("% (");Serial.print(power_value);Serial.println(")");
+      Serial.print("power: ");Serial.print(power_value);Serial.println("(DAC value)");
       Serial.print("galvo: ");Serial.println(galvo_on);
       Serial.print("analog channel (value): ");Serial.print(analog_channel);Serial.print(" (");Serial.print(power_value);Serial.println(")");
       Serial.print("digital channel (value): ");Serial.print(digital_channel);Serial.print(" (");Serial.print(1);Serial.println(")"); 
@@ -120,7 +120,7 @@ class Laser{
 // set analog  
     ::setChannel(analog_channel,power_value);
 //set galvo
-    analogWrite(galvo_pin,galvo_on);
+    ::galvo_to(galvo_pin,galvo_on);
 //set digital
     digitalWrite(digital_channel,1); 
     
@@ -128,14 +128,17 @@ class Laser{
   }
 };
 
+void galvo_to(int pin, int pos){
+  if(galvo_override == false){analogWrite(pin, pos);}
+}
 /////////////////////////////////////////////INSTANSES/////////////////////////////////////////////
 
-                //wav  ach  dch  min  max     cal   gOn   goff
-Laser        L405(405,  8,  -1,  0,   65535,  1,    2000, 2100);
-Laser        L488(488,  9,  29,  0,   65535,  1,    2000, 2100);
-Laser        L561(561,  10, 30,  0,   65535,  1,    2000, 2100);
-Laser        L660(660,  11, 31,  0,   65535,  1,    2000, 2100);
-Laser        L780(780,  0,  17,  0,   32767,  1,    2500, 2100);
+                //wav  ach  dch  min  max     gOn   goff
+Laser        L405(405,  8,  -1,  0,   65535,  2000, 2100);
+Laser        L488(488,  9,  29,  0,   65535,  2000, 2100);
+Laser        L561(561,  10, 30,  0,   65535,  2000, 2100);
+Laser        L660(660,  11, 31,  0,   65535,  2000, 2100);
+Laser        L780(780,  0,  17,  0,   32767,  2500, 2400);
 
 void trigger_function(){                  //interrupt CHANGE
   int d = digitalRead(Trigger_IN);
@@ -224,28 +227,34 @@ void checkI2C(){
 
 void respond(String device,String command1, String command2) {
     if(verbose){Serial.print("respond: ");Serial.print(device);Serial.print(" ");Serial.print(command1);Serial.print(" ");Serial.println(command2); }
-    if(device == "stop")        {analogWrite(A21,shutter_close);setAlltoZero();}       
+    if(device == "stop")        {
+                                  if(galvo_override==false){analogWrite(A21,shutter_close);}
+                                  setAlltoZero();
+                                  }       
     if(device == "405")         {L405.power(command1.toInt());}    //receive power as a percentage 
     if(device == "488")         {L488.power(command1.toInt());}
     if(device == "561")         {L561.power(command1.toInt());}
     if(device == "660")         {L660.power(command1.toInt());}
     if(device == "780")         {L780.power(command1.toInt());}
     
-    if(device == "mode")        {mode = command1.toInt();}                             
+    if(device == "mode")        {mode = command1.toInt();}
+    
     if(device == "G1")           {analogWrite(A21,command1.toInt());} //for manually setting the galvo (tuning etc.)
     if(device == "G2")           {         //for manually setting the galvo (tuning etc.)
-                                 analogWrite(A22,command1.toInt());
-                                 //Serial.println(command1.toInt());
-                                }                            
+                                 analogWrite(A22,command1.toInt());} 
+                                 
+    if(device == "GM")          {if(command1.toInt()==1){galvo_override = true;}       
+                                 if(command1.toInt()==0){galvo_override = false;}}
+                                                                        
     if(device == "D")           {digitalWrite(command1.toInt(),command2.toInt());} //For manually turning on/off digital pins
     if(device == "A")           {setChannel(command1.toInt(),command2.toInt());} //For manually turning on/off digital pins
     
     if(device == "verbose")     {if(command1.toInt()==1){verbose = true;}       
                                  if(command1.toInt()==0){verbose = false;}}
+                                 
     if(device == "hello")       {Serial.println("lasers");}       //handshake  
     if(device == "report")      {Serial.print("mode: ");Serial.println(mode);
-                                 Serial.print("active wav: ");Serial.println(active_wavelength);
-                                }
+                                 Serial.print("active wav: ");Serial.println(active_wavelength);}
 }
 
 

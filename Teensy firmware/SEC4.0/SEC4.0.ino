@@ -144,6 +144,7 @@ void sendWriteSPI(uint32_t registers, uint32_t valueX, uint32_t valueY){   // qu
   for(int i=24;i>-8;i=i-8){SPI.transfer((registers >> i) & 0xFF);}      //registers
   for(int i=24;i>-8;i=i-8){SPI.transfer((valueX >> i) & 0xFF);}         //X command
   for(int i=24;i>-8;i=i-8){SPI.transfer((valueY >> i) & 0xFF);}         //Y command
+  SPI.transfer(0x7e); //delimiter byte
   digitalWrite(slaveSelectPin,HIGH);
   SPI.endTransaction();
   
@@ -156,12 +157,16 @@ void mirrorGain(int gY, int gZ){
 }
 
 void mirrorOffset(int osY, int osZ){
+  //conditioning to make sure Y,Z are in range
   sendWriteSPI(0x98019901,generateSPFPR(float(osY)),generateSPFPR(float(osZ)));
 }
 
 
-void mirrorTo(int pY, int pZ){
-  
+void mirrorTo(float pY, float pZ){
+  // -1.0 -- 1.0 range
+  //conditioning to make sure Y,Z are in range
+  Serial.print(pY);Serial.print(" ");Serial.println(pZ);
+  sendWriteSPI(0x50025102,generateSPFPR(pY),generateSPFPR(pZ));
 }
 
 
@@ -197,7 +202,7 @@ void hablar(String parabla){
 }
 
 void respond(String device,String command1, String command2, String command3, String command4, String command5) {
-    if(device == "hello")                         {Serial.println("Hi there!");}
+    if(device == "hello")                         {Serial.println("Raymond Driver Board");}
 // Scan command
     if(device == "S")                             {
         scan_when_ready = true;
@@ -238,21 +243,25 @@ void setup() {
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ main loop ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+float y=0.0;
 void loop() {
   checkSerial();
-  if(scan_when_ready){ //scan command received and hardware set in motion. 
-                       //Monitor until all devices signal they are ready
-    if(digitalRead(filter_pin)) {filter_flag = true;}
-    if(digitalRead(camera_pin)) {camera_flag = true;}
-    if(digitalRead(laser_pin))  {laser_flag = true;}
-    if(digitalRead(z_pin))      {z_flag = true;}
-    if(digitalRead(y_pin))      {y_flag = true;}
-    }
-
-//  periodic maintanence tasks and status reports here
+//  if(scan_when_ready){ //scan command received and hardware set in motion. 
+//                       //Monitor until all devices signal they are ready
+//    if(digitalRead(filter_pin)) {filter_flag = true;}
+//    if(digitalRead(camera_pin)) {camera_flag = true;}
+//    if(digitalRead(laser_pin))  {laser_flag = true;}
+//    if(digitalRead(z_pin))      {z_flag = true;}
+//    if(digitalRead(y_pin))      {y_flag = true;}
+//    }
+//
+////  periodic maintanence tasks and status reports here
+//
   if(millis() > prev_t + 100 && in_scan == false){
   prev_t = millis();
+  y = y + 10;
+  if(y > 1000){y=-1000;}
+  mirrorTo(y/1000.0,0);
   }
 }
 

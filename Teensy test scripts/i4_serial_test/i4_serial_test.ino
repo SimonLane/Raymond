@@ -73,7 +73,7 @@ float Temp(){
       if(b==4){t = t | incomingByte;}
       b++;
     }
-  Serial.println(t * 0.0625);
+Serial.println(t * 0.0625);
 }
 
 
@@ -105,7 +105,7 @@ void focus(float f){
 void focus(int fp){
 //fp range is 700 to 1700
 
-  //Serial.print("set focus: ");Serial.print(fp);Serial.println(" units");
+//Serial.print("set focus: ");Serial.print(fp);Serial.println(" units");
   if(fp<700 || fp>1700){return false;} //out of range check
 //template  
 //command structure, 10 bytes:
@@ -125,17 +125,17 @@ void focus(int fp){
 
 long unsigned prev_t = 0;
 int k=700;
-int inc = 1;
+int inc = 10;
 
 void loop() {
 
-if(millis() > prev_t + 1000){
-  Temp();
+if(millis() > prev_t + 100){
+  //Temp();
   prev_t = millis();
   focus(k);
   k = k + inc;
   if(k > 1200)  {inc = inc * -1.0;}
-  if(k < 800)   {inc = inc * -1.0;}
+  if(k < 700)   {inc = inc * -1.0;}
   }
 
 }
