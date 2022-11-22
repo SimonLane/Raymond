@@ -239,7 +239,9 @@ void setup() {
   delay(100);
   ETL_handshake();
   //mirror_handshake(); //TO DO 
-
+  pinMode(slaveSelectPin,OUTPUT);
+  pinMode(DNreadyPin,OUTPUT);
+  pinMode(TriggerPin,INPUT);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ main loop ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -257,11 +259,12 @@ void loop() {
 //
 ////  periodic maintanence tasks and status reports here
 //
-  if(millis() > prev_t + 100 && in_scan == false){
+  if(millis() > prev_t + 100){
   prev_t = millis();
   y = y + 10;
   if(y > 1000){y=-1000;}
   mirrorTo(y/1000.0,0);
+  Serial.println(y);
   }
 }
 
