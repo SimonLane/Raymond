@@ -43,18 +43,18 @@ class StageNavigator(QtWidgets.QGraphicsView):
         
         
     def fitInView(self, rect=None, scale=True):
-        rect = QtCore.QRectF(self.stagePixmap.pixmap().rect())
-        if not rect.isNull():
-            self.setSceneRect(rect)
-            if not self._empty:
-                unity = self.transform().mapRect(QtCore.QRectF(0, 0, 1, 1))
-                self.scale(1 / unity.width(), 1 / unity.height())
-                viewrect = self.viewport().rect()
-                scenerect = self.transform().mapRect(rect)
-                factor = min(viewrect.width() / scenerect.width(),
-                             viewrect.height() / scenerect.height())
-                self.scale(factor, factor)
-            self.zoom = 0
+        if rect==None: rect = QtCore.QRectF(self.stagePixmap.pixmap().rect())
+
+        self.setSceneRect(rect)
+        if not self._empty:
+            unity = self.transform().mapRect(QtCore.QRectF(0, 0, 1, 1))
+            self.scale(1 / unity.width(), 1 / unity.height())
+            viewrect = self.viewport().rect()
+            scenerect = self.transform().mapRect(rect)
+            factor = min(viewrect.width() / scenerect.width(),
+                         viewrect.height() / scenerect.height())
+            self.scale(factor, factor)
+        self.zoom = 0
             
     def mousePressEvent(self,e):
         if self.stagePixmap.isUnderMouse():
@@ -70,6 +70,7 @@ class StageNavigator(QtWidgets.QGraphicsView):
         xPx, yPx = int(self.mapToScene(e.x(), e.y()).x()), int(self.mapToScene(e.x(), e.y()).y())
         xUm, yUm = self.px2um(xPx), self.px2um(yPx)
         self.Raymond.stage.move_to(X=xUm, Y=yUm)
+        print('dblclk px:', xPx, yPx, 'um:', xUm, yUm)
         
     def um2px(self, um):
         return int((um + 10000) * (1/self.calibration))
@@ -116,8 +117,7 @@ class StageNavigator(QtWidgets.QGraphicsView):
         ti = group.childItems()[4]
         ti.setHtml('<p style="color:red; font: 100px;">%s</p>' %int(number))
 
-        
-        
+                
     def addPixmap(self, img,x,y): #in um
         self.zoom = 0
         self._empty = False
@@ -125,7 +125,8 @@ class StageNavigator(QtWidgets.QGraphicsView):
         a = self.stageScene.addPixmap(QtGui.QPixmap(img))
         a.setPos(self.um2px(x)+self.offset[0],self.um2px(y)+self.offset[1]) #in px
         a.setZValue(-1)
-        #self.fitInView() #turn on to resize the view when doing tile scan
+        print('putting image at (px):',self.um2px(x)+self.offset[0],self.um2px(y)+self.offset[1] )
+        self.fitInView() #turn on to resize the view when doing tile scan
         
     def wheelEvent(self, event):
         if not self._empty:

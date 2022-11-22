@@ -40,7 +40,8 @@ if sys.platform == "win32":
     from Camera_PG           import Camera_PG
     from Stage_ASI           import Stage_ASI
     from StageNavigator      import StageNavigator
-    from stagePositionClass import ImagingLocation
+    from stagePositionClass  import ImagingLocation
+    from ETL                 import ETLens
 
 class Raymond(QtWidgets.QMainWindow):
     def __init__(self):
@@ -111,10 +112,10 @@ class Raymond(QtWidgets.QMainWindow):
         
     # Tile area options
         self.tileAreaNames = [
-            '~6x6mm     (~2s)',
-            '~9x9mm     (~10s)',
-            '~15x15mm   (~25s)',
-            '~20x20mm   (~70s)']    
+            '~6x6mm  (~15s)',
+            '~9x9mm  (~30s)',
+            '~15x15mm(~60s)',
+            '~20x20mm(~90s)']    
         self.tileAreas          = [(2,1),(3,2),(5,3),(7,5)]
         self.tileDisplayLimits  = [(5.8),(8.7),(14.5),(20.4)]
 # =============================================================================
@@ -158,10 +159,9 @@ class Raymond(QtWidgets.QMainWindow):
 # Queues and timers for inter-thread thread-safe task handling
 # =============================================================================
         self.tileScanQ = queue.Queue()
-        self.tileScan_timer = QtCore.QTimer()
-        self.tileScan_timer = QtCore.QTimer()
-        self.tileScan_timer.setInterval(20)
-        self.tileScan_timer.timeout.connect(self.imageToMap)
+        # self.tileScan_timer = QtCore.QTimer()
+        # self.tileScan_timer.setInterval(200)
+        # self.tileScan_timer.timeout.connect(self.imageToMap)
         
         #For imaging thread to update the GUI
         self.thread_to_GUI = queue.Queue()
@@ -193,7 +193,9 @@ class Raymond(QtWidgets.QMainWindow):
                     # levels=(15,240), scale=(1/231,1/231), 
                     # pos=(-11.9,-11.6), autoRange=False)
         
-# connect to devices
+# =============================================================================
+# # connect to devices
+# =============================================================================
         if not self.demo_mode:
         # ThorLabs
             self.TLsdk = TLCameraSDK()
@@ -211,7 +213,9 @@ class Raymond(QtWidgets.QMainWindow):
 #  setup current user
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
             i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])# get the last user
-
+        # ETL
+            self.ETL            = ETLens(self, 'optotune ETL', 'COM12')
+            
         if self.demo_mode:
             self.information('Loaded interface in DEMO mode. No devices attached.', 'r')
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
@@ -400,10 +404,10 @@ class Raymond(QtWidgets.QMainWindow):
 
         self.NewPButton       = QtWidgets.QPushButton('+')
         self.NewPButton.setFixedWidth(20)
-
-        self.LoadPButton      = QtWidgets.QPushButton('Load')
         self.NewPButton.released.connect(lambda: self.addPos(position=[None,None,None]))
 
+        self.LoadPButton      = QtWidgets.QPushButton('Load')
+        
         self.LoadPButton.released.connect(self.loadPositions)
         self.PositionListWidget      = QtWidgets.QTableWidget()
         self.PositionListWidget.cellDoubleClicked.connect(self.pos_table_click)
@@ -478,7 +482,7 @@ class Raymond(QtWidgets.QMainWindow):
         
 
 #~~~~~~~~~~~~~~~ File save Pane ~~~~~~~~~~~~~~~ 
-#Fileing Widgets
+#Filing Widgets
         self.FileUserLabel                  = QtGui.QLabel('User:')
         self.FileUserList                   = QtGui.QComboBox()
 #generate user list
@@ -856,16 +860,10 @@ class Raymond(QtWidgets.QMainWindow):
     
     def setupTileScan(self):
         if self.stage.flag_CONNECTED:
-            #set stage to 'rapid mode'
-            self.stage.rapidMode(rapid=True)
-            # start live imaging on camera 3 (if not already on)
-            if not self.liveImaging: self.showViewFinder()
-            # start a timer to check for signals from the worker
-            self.tileScan_timer.start()
-            #start the worker thread to control the stage
-        # To Do - update visible range to match tiled area dimensions
-            r = self.tileDisplayLimits[self.tileAreaSelection.currentIndex()]
-    
+            
+            self.stage.set_speed(X=1.9, Y=1.9, Z=1.9)
+            if self.liveImaging: self.showViewFinder() #if live imaging is on, turn it off
+        
             self.tileScanThread = threading.Thread(target=self.doTileScan,
                     name="tile scan", args=())
             self.tileScanThread.start()    
@@ -874,49 +872,64 @@ class Raymond(QtWidgets.QMainWindow):
 
     def doTileScan(self): # Runs in thread
         tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
-        fp = True
         t = time.time()
-        FOVx = round(512 * self.VF_cal)  #um, use only half the image for more consistent brightness
+        FOVx = round(512  * self.VF_cal)  #um, use only half the image for more consistent brightness
         FOVy = round(1280 * self.VF_cal)  #um
         Xrange = FOVx*tilesX*2 #compensate for half image size
         Yrange = FOVy*tilesY
+
         X,Y,Z = self.stage.get_position()
 
-        #To Do - limit scan area in line with stage limits
-        Xums = list(range(int(Xrange/-2)-int(FOVx*0.5),int(Xrange/2)+int(FOVx*0.5),FOVx)) #in microns
-        Yums = list(range(int(Yrange/-2)+int(FOVy*0),int(Yrange/2)+int(FOVy*0.5),FOVy)) #in microns
+        #limit scan area in line with stage limits
+        XL = max(int(Xrange/-2)-int(FOVx*0.5),self.stage.imaging_limits[0][1])
+        XU = min(int(Xrange/+2)+int(FOVx*0.5),self.stage.imaging_limits[0][0])
+        YL = max(int(Yrange/-2)-int(FOVy*0.5),self.stage.imaging_limits[1][1])
+        YU = min(int(Yrange/+2)+int(FOVy*0.5),self.stage.imaging_limits[1][0])
+        # generate lists of positions
+        Xums = list(range(XL,XU,FOVx)) #in microns
+        Yums = list(range(YL,YU,FOVy)) #in microns
         
-        print(self.stage.get_position())
+        rect=QtCore.QRectF(   self.StageMap.um2px(Xums[0]),
+                              self.StageMap.um2px(Yums[0]),
+                              self.StageMap.um2px(Xrange),
+                              self.StageMap.um2px(Yrange)  )
+        self.StageMap.fitInView(rect = rect)
 
-        for yn, y in enumerate(Yums):
-            for xn, x in enumerate(Xums):
-                self.stage.move_to(X + x, Y + y, Z)
-                while(True):
-                    time.sleep(0.1)
-                    if not self.camera3.is_live or not self.stage.flag_CONNECTED:
-                        self.tileScanQ_timer.stop()
-                        self.stage.rapidMode(rapid=False)
-                        print("tile scan aborted")
-                        return
-                    if self.stage.is_moving(): pass 
-                    # TO DO - replace with TTL signal from stage
-                    else:
-                        self.tileScanQ.put([[x,y,FOVx,FOVy],self.VF_image])
-                        if fp: 
-                            t = time.time()
-                            fp = False
-                        break
-            Xums.reverse()
-        while(self.tileScanQ.qsize() > 0): time.sleep(0.1)
-        self.showViewFinder() #turn off live view
-        self.tileScan_timer.stop()
+
+        self.stage.get_speed()
+        self.showViewFinder()
+    # build list of positons
+        positions_to_visit = []
+        for y in Yums:
+            if y + Y > self.stage.imaging_limits[1][0]: y = self.stage.imaging_limits[1][0] - Y
+            if y + Y < self.stage.imaging_limits[1][1]: y = self.stage.imaging_limits[1][1] - Y
+            for x in Xums:
+                if x + X > self.stage.imaging_limits[0][0]: x = self.stage.imaging_limits[0][0] - X
+                if x + X < self.stage.imaging_limits[0][1]: x = self.stage.imaging_limits[0][1] - X
+                positions_to_visit.append((x + X, y + Y, Z))
+                print(x + X,y + Y, Z)
+            Xums.reverse()    
+
+        for position in positions_to_visit:
+            print(position)
+            self.stage.move_to(position[0],position[1],position[2])
+            for i in range(5): 
+                time.sleep(0.1)
+                self.grabImageFromVF()
+            while(self.stage.is_moving()):
+                time.sleep(0.1)
+                self.grabImageFromVF()
+            image = self.grabImageFromVF()
+            ex, why, zed = self.stage.get_position()
+            self.imageToMap(image, ex,why,FOVx,FOVy)
+            print('image to map:', ex,why)
+            
+        self.stage.move_to(X=X,Y=X,Z=Z) #return to starting position
+        self.showViewFinder()
         self.stage.rapidMode(rapid=False)
-        print('end',time.time(), self.tileScanQ.qsize())
         print("tile scan complete: ", time.time() - t, "s")
-        self.stage.move_to(X=X,Y=X,Z=Z) #return to centre
-        
-        
-        
+
+
     def showViewFinder(self):
         if self.camera3.flag_CONNECTED:
             if not self.liveImaging:
@@ -940,12 +953,14 @@ class Raymond(QtWidgets.QMainWindow):
     def grabImageFromVF(self):
         image = self.camera3.getFrame() #is this the newest frame in the buffer or the oldest?
         if len(image) != 0:
-            self.display_image(image)
             #convert image to lower bit-depth for the map
             self.VF_image = image.astype('uint8') #keep a copy of the last image in memory for use in the map
- 
+            self.display_image(self.VF_image)
+        return self.VF_image.copy()
+            
+            
     def updateViewFindExposure(self):
-        e = self.viewFindExposure.text()
+        e = self.viewFindExposure.text() # TO DO - change to a slider
         self.camera3.exposure(e)
     
     def update_modifier_image(self):
@@ -957,16 +972,14 @@ class Raymond(QtWidgets.QMainWindow):
         np.save("VFmodifier",self.modifier_image)
         print("modifier image updated")
         
-    def imageToMap(self):
-        if(self.tileScanQ.qsize() > 0):
-            image = self.tileScanQ.get() 
-            x,y,FOVx,FOVy = image[0] # in um
-            # crop and transform image
-            img = image[1][round(FOVx/self.VF_cal):,:]#use only half of the X width
-            img = np.flip(np.rot90(img,k=3),1).copy()
-            img = QtGui.QImage(img, img.shape[1], 
-                               img.shape[0], QtGui.QImage.Format_Grayscale8)
-            self.StageMap.addPixmap(img,x,y) #still in um
+    def imageToMap(self, image,x,y,FOVx,FOVy): #receive positions in um, FOV in px
+        print('getting image', x,y)
+        # crop and transform image
+        img = image[round(FOVx/self.VF_cal):,:]#use only half of the X width
+        img = np.flip(np.rot90(img,k=3),1).copy()
+        img = QtGui.QImage(img, img.shape[1], 
+                           img.shape[0], QtGui.QImage.Format_Grayscale8)
+        self.StageMap.addPixmap(img,x,y) #still in um
             
 # =============================================================================
 #  Image Display Functions
@@ -1138,9 +1151,9 @@ class Raymond(QtWidgets.QMainWindow):
     def addPos(self, position=[None,None,None], inuse=True, row=None): #position supplied in um
         print('add received: ', row)        
     # create new instance for imaging location
-        IL = ImagingLocation(self, self.VF_cal, self.StageMap)
-        IL.addPosition(position[0],position[1],position[2],None)
-        IL.ID = self.getLocationID()
+        IL = ImagingLocation(self, self.VF_cal, self.StageMap.stageScene)
+        
+        IL.addLocation(position[0],position[1],position[2],None, um=True)
     #clear table
     
     #add to position list
@@ -1149,7 +1162,7 @@ class Raymond(QtWidgets.QMainWindow):
             # update index and mark
             item.updateIndex(i)
             # rebuild table from position list
-            
+
     
     # store to disk in case of crash
         self.positionsToDisk()
@@ -1221,7 +1234,7 @@ class Raymond(QtWidgets.QMainWindow):
             self.addPos(position=p, inuse=i, row=r)
 
     def getLocationID(self):
-        self.locationID =+1
+        self.locationID = self.locationID + 1
         return self.locationID
         
 # =============================================================================

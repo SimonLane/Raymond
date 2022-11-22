@@ -18,25 +18,23 @@ class Stage_ASI(QtGui.QWidget):
         self.position = []
         self.port = port
         self.name = name
-        self.imaging_limits     = [[10000,-10000],[10000,-10000],[2000,-10000]] #X +- 10mm  Y +- 10mm  Z +2mm -10mm
-        self.escape_limits      = [[1500,-15000],[21000,-4000],[1000,-21000]]
-        self.override_limits    = [[20000,-20000],[20000,-20000],[20000,-10000]]
+        self.imaging_limits     = [[10000,-10000],[8500,-10000],[0,-10000]] #X +- 10mm  Y +- 10mm  Z +2mm -10mm
         self.limits             = self.imaging_limits
         self.home_position      = [0,0,0]
         self.start_position     = [0,0,-2000]
-        self.escape_position    = [-14000,0,-21000]
+        self.escape_position    = [0,-2000,-10000]
         self.prev_position      = [0,0,-2000]
-
+        self.baudrate=115200
+    
     def connect(self):
         try:
-            self.ASI = serial.Serial(port=self.port, baudrate=115200, timeout=0.2)
+            self.ASI = serial.Serial(port=self.port, baudrate=self.baudrate, timeout=0.2)
             time.sleep(0.3)
-
             self.flag_CONNECTED = True
      
 #            set some defaults
             self.ASI.write(b"UM X=10000 Y=10000 Z=10000\r")  #(per mm) set the movement units to tenths µm(default is 10000, tenths of µm)
-            self.ASI.write(b"R X=0 Y=0 Z=10\r")              # Relative move - Convert to tenths of µm, default 1 micron
+            self.ASI.write(b"R X=0 Y=0 Z=0\r")              # Relative move - Convert to tenths of µm, default 1 micron
             self.ASI.write(b'RT Y=0.1\r')                    # TTL pulse width
             self.ASI.write(b'AC Z=10\r')                     # Acceleration (ms to reach max speed)
             self.ASI.write(b'TTL X=2 Y=2 F=1\r')             # TTL modes
@@ -49,7 +47,9 @@ class Stage_ASI(QtGui.QWidget):
             self.ASI.readline()
             self.ASI.readline()
             self.ASI.readline()
+
             self.position = self.get_position()
+            print('stage position', self.position)
             self.parent().information("Connected to %s" %(self.name), 'g')
             self.set_speed(X=1.36, Y=1.36, Z=1.8)            # Max speed (mm/s) - limit appears to 1.92mm/s
             self.backlash_compensation(True)                 # Backlash compensation distance
@@ -81,7 +81,7 @@ class Stage_ASI(QtGui.QWidget):
             
             
     def move_to(self, X=None,Y=None,Z=None):
-        # print('abs:', X,Y,Z)
+        print('abs:', X,Y,Z)
 #        accept inputs in (float) µm
         if X is not None or Y is not None or Z is not None:
             string = 'M'
@@ -129,9 +129,7 @@ class Stage_ASI(QtGui.QWidget):
         
     def get_position(self):
         self.clear_buffer()
-        a=0
-        if a==0: self.ASI.write(b"W X Y Z\r") #current stage position
-        a+=1
+        self.ASI.write(b"W X Y Z\r") #current stage position
         in_ = self.ASI.readline().decode().split(' ')
         if len(in_) == 5:
             p = []
@@ -152,7 +150,6 @@ class Stage_ASI(QtGui.QWidget):
         self.ASI.readline()
     
     def escape(self):
-        self.set_limits(self.escape_limits)
         self.set_speed(X=1.36,Y=1.36,Z=1.36)
         self.move_to(X=self.escape_position[0],Y=self.escape_position[1],Z=self.escape_position[2])
 
@@ -195,15 +192,29 @@ class Stage_ASI(QtGui.QWidget):
             self.ASI.write(b'S X=1.36 Y=1.36 Z=1.36\r') #default to 70% speed
             self.parent().information('>> stage speed: X=1.36 Y=1.36 Z=1.36', 'g')
         self.ASI.readline()
+    
+    def get_speed(self):
+        self.clear_buffer()
+        self.ASI.write(b'S X? Y? Z?\r')
+        while self.ASI.inWaiting() == 0: pass
+        print(self.ASI.readline())
         
     def is_moving(self):
-        self.clear_buffer()
+        debug = False
         self.ASI.write('/\r'.encode())
-        while self.ASI.inWaiting() < 1: pass
-        s = self.ASI.readline().decode("utf-8")
-        if s[0] == 'B': #moving
-            return True
-        else: return False
+        time.sleep(0.05)
+        if self.ASI.inWaiting() > 0:
+            s = self.ASI.readline().decode("utf-8")
+            if s[0] == 'N': # not busy
+                if debug: print(s[0], 'stage not busy')
+                return False
+            elif s[0] == 'B': # moving (busy)
+                if debug: print(s[0], 'stage busy')
+                return True
+            elif s[0] == ':': # error message
+                if debug: print(s[0], 'stage error')
+                return True
+        return True
     
     def rapidMode(self, rapid=False):
         if rapid: #for use in tile scanning
