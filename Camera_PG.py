@@ -97,13 +97,18 @@ class Camera_PG(QtGui.QWidget):
     
     def binning(self, b):
         pass
-
+    
+    def flush(self):
+        #how to clear the buffer?
+        pass
+        
     def close(self): 
         if self.flag_CONNECTED == True:
             # if camera in acquisition:
             if self.camera.IsStreaming() == True:
                 print('interrupted %s acquisition during close' %(self.name))
                 self.stop_live()
+        
             
         # Deinitialize camera
             self.camera.DeInit()

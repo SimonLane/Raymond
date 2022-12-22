@@ -21,13 +21,13 @@ void setup() {
 // input stage
   sendWriteSPI(0x40005102,0x60,generateSPFPR(0));                       //Select signal generator system as active input for X and static value for Y axis.
   sendWriteSPI(0x60006001,0x02,0x01);                                   //(XY units, run_flag:true) [Units: 0,Current; 1,Optical feedback; 2,XY]
-  sendWriteSPI(0x60026003,0x01,generateSPFPR(1.5));                     //(shape, Hz)[shape: 0,sine; 1,Triangle; 2, Square; 3,Saw; 4, Pulse]
+  sendWriteSPI(0x60026003,0x03,generateSPFPR(0.5));                     //(shape, Hz)[shape: 0,sine; 1,Triangle; 2, Square; 3,Saw; 4, Pulse]
   sendWriteSPI(0x60046005,generateSPFPR(0.8),generateSPFPR(0));         //(Amplitude, Offset)
   sendWriteSPI(0x60066007,generateSPFPR(0),1);                          //(Phase [radians], Cycles [-1 for infinite])
   sendWriteSPI(0x60086009,generateSPFPR(0.5),1);                        //(Duty cycle, Ext trig [0, disable; 1 rising/falling; 2, falling edge])
 //input conditioning
-  sendWriteSPI(0x98009801,generateSPFPR(0.05),generateSPFPR(0.033));      // X  (Gain, Offset)
-  sendWriteSPI(0x99009901,generateSPFPR(0.05),generateSPFPR(0.047));      // Y  (Gain, Offset)
+  sendWriteSPI(0x98009801,generateSPFPR(0.075),generateSPFPR(-0.005));      // X  (Gain, Offset)
+  sendWriteSPI(0x99009901,generateSPFPR(0.05),generateSPFPR(0.048));      // Y  (Gain, Offset)
 //control stage (open or closed loop)
   sendWriteSPI(0x40024007,0xC0,0xC1);       //Activate closed loop control for both axes
 // output conditioning

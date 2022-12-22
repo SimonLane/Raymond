@@ -24,7 +24,7 @@ class laser_line():
         self.parameter_1 = p1
         self.parameter_2 = p2
         self.laser_on = False
-        
+        self.firmware_verbose = False #Store whether the firmware was in verbose mode, set back when closing connection
         self.percentage = 0
         self.microWatts = 0
         self.value_16   = 0
@@ -122,6 +122,7 @@ class Lasers(QtWidgets.QMainWindow):
         if self.connection:
             s = "/%s.%s;\n" %(w,int(v))
             self.teensy.write(bytes(s,'utf-8')) # send the 16-bit value for the DAC
+            print("sending command: %s" %s)
             
     def shutter(self):
         if self.connection:
@@ -232,12 +233,15 @@ class Lasers(QtWidgets.QMainWindow):
         self.tab1.setLayout(self.tab1.layout)
 
 #TAB2
-
+        self.ILboardMode = QtWidgets.QCheckBox('Illumination board I2C mode')
+        self.ILboardMode.setChecked(False)
+        self.ILboardMode.stateChanged.connect(self.I2Cmode)
         self.connectionStatus = QtWidgets.QLabel('No connection')
         self.connectionStatus.setStyleSheet("color: black;")
         
         self.tab2.layout.addWidget(self.connectionStatus,                   0,0,1,1)
-        self.tab2.layout.addWidget(self.Settings_table,                     4,0,10,1)
+        self.tab2.layout.addWidget(self.ILboardMode,                        1,0,1,1)
+        self.tab2.layout.addWidget(self.Settings_table,                     5,0,10,1)
         
         self.setCentralWidget(self.tabs)
         self.tab2.setLayout(self.tab2.layout)
@@ -253,7 +257,7 @@ class Lasers(QtWidgets.QMainWindow):
             
             self.teensy = serial.Serial(port=port, baudrate=115200, timeout=0.5)
             time.sleep(1) #essential to have this delay!
-            self.teensy.write(bytes("/verbose.0;\n",'utf-8'))   #turn off verbose mode 
+            
             self.teensy.write(b'/hello;\n')                     #handshake
             reply = self.teensy.readline().strip()
             print(reply)
@@ -263,10 +267,22 @@ class Lasers(QtWidgets.QMainWindow):
                 self.connectionStatus.setText('Connection established: %s' %(port))
                 #put the illuminiation board into mode 0 (turns off the trigger)
                 self.teensy.write(bytes("/mode.0;\n",'utf-8'))
-
+            elif  b'Over Serial' in reply:
+                print('verbose mode detected')
+                #The laser control board is in verbose mode, needs to not be for serial communication.
+                self.firmware_verbose = True
+                self.teensy.write(bytes("/verbose.0;\n",'utf-8'))   #turn off verbose mode 
+                print('verbose mode off command')
+                reply = self.teensy.readline().strip()
+                print(reply)
+                self.teensy.close()
+                time.sleep(0.5)
+                print('close connection')
+                self.connect('C')
             else:
                 self.teensy.close()
-#                print('closed')
+                print('close connection')
+                
         if state == "D":
             self.teensy.close()
             self.connection = False
@@ -282,6 +298,14 @@ class Lasers(QtWidgets.QMainWindow):
             self.g_spinbox.setEnabled(False)
             self.teensy.write(bytes("/GM.0;\n",'utf-8'))
     
+    def I2Cmode(self):
+        if self.ILboardMode.isChecked():
+            self.teensy.write(bytes("/mode.1;\n",'utf-8'))
+        else:
+            self.teensy.write(bytes("/mode.0;\n",'utf-8'))
+            
+            
+            
     def galvo_value(self, value):
         # update the widgets
         self.g_spinbox.setValue(value)

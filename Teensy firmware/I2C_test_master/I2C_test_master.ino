@@ -22,7 +22,7 @@ void setup()
 
     // Data init
     memset(databuf, 0, sizeof(databuf));
-    count = 0;
+
 
     Serial.begin(115200);
 }
@@ -34,12 +34,7 @@ void loop()
     // Send string to Slave
     if(true)
     {
-        // Construct data message
-        sprintf(databuf, "Data Message #%d", count++);
 
-        // Print message
-        Serial.printf("Sending to Slave: '%s' ", databuf);
-        
         // Transmit to Slave
         Wire1.beginTransmission(target);   // Slave address
         Wire1.write("/hello;"); // Write string to I2C Tx buffer (incl. string null at end)

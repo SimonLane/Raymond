@@ -55,7 +55,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.verbose   = True # Prints more information to the console, for debugging
     
     # Camera calibrations
-        self.VF_cal = 700/261 # um/px
+        self.VF_cal = 700/264 # um/px
         self.TL_cal = 1         # to do (px/um)
         self.stageheight = self.stagewidth = int(22000 / self.VF_cal) # stage map is 22mm in pixels
         # (+-10mm movement + ~half a FOV at each side)
@@ -869,65 +869,125 @@ class Raymond(QtWidgets.QMainWindow):
             self.tileScanThread.start()    
         else:
             self.information("Tile scan not possible, stage not connected", "r")
-
+# =============================================================================
+# experimental doTileScan function, constant speed acqusition...
+# =============================================================================
     def doTileScan(self): # Runs in thread
-        tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
-        t = time.time()
-        FOVx = round(512  * self.VF_cal)  #um, use only half the image for more consistent brightness
-        FOVy = round(1280 * self.VF_cal)  #um
-        Xrange = FOVx*tilesX*2 #compensate for half image size
-        Yrange = FOVy*tilesY
+    
+    # define area to be scanned in ums
+        # areaX, areaY = self.tileAreas[self.tileAreaSelection.currentIndex()]
+        
+        areaX,areaY = 5000,5000 #(um)
 
-        X,Y,Z = self.stage.get_position()
+        oX,oY,oZ = self.stage.get_position() #centre the scan area around current position
+        #to do , add option to center around the centre?
+        # custom scan area defined by dragging box on the screen?
 
         #limit scan area in line with stage limits
-        XL = max(int(Xrange/-2)-int(FOVx*0.5),self.stage.imaging_limits[0][1])
-        XU = min(int(Xrange/+2)+int(FOVx*0.5),self.stage.imaging_limits[0][0])
-        YL = max(int(Yrange/-2)-int(FOVy*0.5),self.stage.imaging_limits[1][1])
-        YU = min(int(Yrange/+2)+int(FOVy*0.5),self.stage.imaging_limits[1][0])
-        # generate lists of positions
-        Xums = list(range(XL,XU,FOVx)) #in microns
-        Yums = list(range(YL,YU,FOVy)) #in microns
         
-        rect=QtCore.QRectF(   self.StageMap.um2px(Xums[0]),
+        YU = int(min(oY + (0.5 * areaY), self.stage.imaging_limits[1][0]))
+        YL = int(max(YU - areaY, self.stage.imaging_limits[1][1]))
+
+        Yums = list(range(YU,YL,-1280*int(self.VF_cal))) #in microns
+        Xstart = min(oX + (0.5 * areaX), self.stage.imaging_limits[0][0])
+        Xend = max(Xstart - areaX, self.stage.imaging_limits[0][1])
+        
+        print('current stage X,Y: ', oX, oY)
+        print('Ys: ', Yums)
+        print('Xstart: ', Xstart, 'Xend: ', Xend)
+        
+        # set FOV to the proposed scan area
+        rect=QtCore.QRectF(   self.StageMap.um2px(Xstart),
                               self.StageMap.um2px(Yums[0]),
-                              self.StageMap.um2px(Xrange),
-                              self.StageMap.um2px(Yrange)  )
+                              self.StageMap.um2px(areaX),
+                              self.StageMap.um2px(areaY)  )
         self.StageMap.fitInView(rect = rect)
 
-
-        self.stage.get_speed()
+        
         self.showViewFinder()
-    # build list of positons
-        positions_to_visit = []
-        for y in Yums:
-            if y + Y > self.stage.imaging_limits[1][0]: y = self.stage.imaging_limits[1][0] - Y
-            if y + Y < self.stage.imaging_limits[1][1]: y = self.stage.imaging_limits[1][1] - Y
-            for x in Xums:
-                if x + X > self.stage.imaging_limits[0][0]: x = self.stage.imaging_limits[0][0] - X
-                if x + X < self.stage.imaging_limits[0][1]: x = self.stage.imaging_limits[0][1] - X
-                positions_to_visit.append((x + X, y + Y, Z))
-                print(x + X,y + Y, Z)
-            Xums.reverse()    
-
-        for position in positions_to_visit:
-            print(position)
-            self.stage.move_to(position[0],position[1],position[2])
-            for i in range(5): 
-                time.sleep(0.1)
-                self.grabImageFromVF()
-            while(self.stage.is_moving()):
-                time.sleep(0.1)
-                self.grabImageFromVF()
+    
+    
+        #move to initial position
+        self.stage.move_to(Xstart, Yums[0])
+        while self.stage.is_moving(): time.sleep(0.1)
+        
+        self.stage.set_speed(X=0.3, Y=1.36, Z=1.8)
+        self.stage.move_to(Xend, Yums[0]) # move at slow speed towards line end
+        
+        prev_x = Xstart
+        while self.stage.is_moving():
             image = self.grabImageFromVF()
-            ex, why, zed = self.stage.get_position()
-            self.imageToMap(image, ex,why,FOVx,FOVy)
-            print('image to map:', ex,why)
-            
-        self.stage.move_to(X=X,Y=X,Z=Z) #return to starting position
+            X,Y,Z = self.stage.get_position()
+            if abs(X-prev_x) > 100:
+                prev_x = X
+                
+                #self.stage.clear_buffer()
+                print('p:', X, Y)
+                self.imageToMap(image, X,Y,50,1280)
+
+
+        self.stage.set_speed(X=1.36, Y=1.36, Z=1.8)
+        self.stage.move_to(X=oX,Y=oX,Z=oZ) #return to starting position
         self.showViewFinder()
-        self.stage.rapidMode(rapid=False)
-        print("tile scan complete: ", time.time() - t, "s")
+
+    # def doTileScan(self): # Runs in thread
+    #     tilesX, tilesY = self.tileAreas[self.tileAreaSelection.currentIndex()]
+    #     t = time.time()
+    #     FOVx = round(512  * self.VF_cal)  #um, use only half the image for more consistent brightness
+    #     FOVy = round(1280 * self.VF_cal)  #um
+    #     Xrange = FOVx*tilesX*2 #compensate for half image size
+    #     Yrange = FOVy*tilesY
+
+    #     X,Y,Z = self.stage.get_position()
+
+    #     #limit scan area in line with stage limits
+    #     XL = max(int(Xrange/-2)-int(FOVx*0.5),self.stage.imaging_limits[0][1])
+    #     XU = min(int(Xrange/+2)+int(FOVx*0.5),self.stage.imaging_limits[0][0])
+    #     YL = max(int(Yrange/-2)-int(FOVy*0.5),self.stage.imaging_limits[1][1])
+    #     YU = min(int(Yrange/+2)+int(FOVy*0.5),self.stage.imaging_limits[1][0])
+    #     # generate lists of positions
+    #     Xums = list(range(XL,XU,FOVx)) #in microns
+    #     Yums = list(range(YL,YU,FOVy)) #in microns
+        
+    #     rect=QtCore.QRectF(   self.StageMap.um2px(Xums[0]),
+    #                           self.StageMap.um2px(Yums[0]),
+    #                           self.StageMap.um2px(Xrange),
+    #                           self.StageMap.um2px(Yrange)  )
+    #     self.StageMap.fitInView(rect = rect)
+
+
+    #     self.stage.get_speed()
+    #     self.showViewFinder()
+    # # build list of positons
+    #     positions_to_visit = []
+    #     for y in Yums:
+    #         if y + Y > self.stage.imaging_limits[1][0]: y = self.stage.imaging_limits[1][0] - Y
+    #         if y + Y < self.stage.imaging_limits[1][1]: y = self.stage.imaging_limits[1][1] - Y
+    #         for x in Xums:
+    #             if x + X > self.stage.imaging_limits[0][0]: x = self.stage.imaging_limits[0][0] - X
+    #             if x + X < self.stage.imaging_limits[0][1]: x = self.stage.imaging_limits[0][1] - X
+    #             positions_to_visit.append((x + X, y + Y, Z))
+    #             print(x + X,y + Y, Z)
+    #         Xums.reverse()    
+
+    #     for position in positions_to_visit:
+    #         # print(position)
+    #         self.stage.move_to(position[0],position[1],position[2])
+    #         for i in range(5): 
+    #             time.sleep(0.1)
+    #             self.grabImageFromVF()
+    #         while(self.stage.is_moving()):
+    #             time.sleep(0.1)
+    #             self.grabImageFromVF()
+    #         image = self.grabImageFromVF()
+    #         ex, why, zed = self.stage.get_position()
+    #         self.imageToMap(image, ex,why,FOVx,FOVy)
+    #         print('image to map:', ex,why)
+            
+    #     self.stage.move_to(X=X,Y=X,Z=Z) #return to starting position
+    #     self.showViewFinder()
+    #     self.stage.rapidMode(rapid=False)
+    #     print("tile scan complete: ", time.time() - t, "s")
 
 
     def showViewFinder(self):
@@ -936,7 +996,8 @@ class Raymond(QtWidgets.QMainWindow):
                 print('starting viewfinder')
                 # set exposure
                 self.camera3.exposure(6500) #To Do - make slider widget to adjust this as needed
-                self.camera3.gain(18)
+                self.camera3.gain(12)
+                self.camera3.flush()
                 self.camera3.live_mode()
                 self.frametimer.setSingleShot(False)
                 self.frametimer.timeout.connect(self.grabImageFromVF)
