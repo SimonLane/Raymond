@@ -137,10 +137,10 @@ void galvo_to(int pin, int pos){
 /////////////////////////////////////////////INSTANSES/////////////////////////////////////////////
 
                 //wav  ach  dch  min  max     gOn   goff
-Laser        L405(405,  8,  -1,  0,   65535,  831, 1200);
-Laser        L488(488,  9,  29,  0,   65535,  831, 1200);
-Laser        L561(561,  10, 30,  0,   65535,  831, 1200);
-Laser        L660(660,  11, 31,  0,   65535,  831, 1200);
+Laser        L405(405,  8,  -1,  0,   65535,  1701, 1200);
+Laser        L488(488,  9,  29,  0,   65535,  1701, 1200);
+Laser        L561(561,  10, 30,  0,   65535,  1701, 1200);
+Laser        L660(660,  11, 31,  0,   65535,  1701, 1200);
 Laser        L780(780,  0,  17,  0,   32767,  2500, 1200);
 
 void trigger_function(){                  //interrupt CHANGE
@@ -219,12 +219,13 @@ void checkI2C(){
                              if(verbose){Serial.print("(I2C) ");}
                              respond(device,command1,command2);
                              serial_part = 0;
-                             received = 0;}                     
+                             }                     
    else if (serial_part == 1){device   += rc;}
    else if (serial_part == 2){command1 += rc;}
    else if (serial_part == 3){command2 += rc;}
    i++;
  }
+ received = 0;
 }
 
 void respond(String device,String command1, String command2) {
@@ -239,9 +240,10 @@ void respond(String device,String command1, String command2) {
     if(device == "660")         {L660.power(command1.toInt());}
     if(device == "780")         {L780.power(command1.toInt());}
     
-    if(device == "mode")        {mode = command1.toInt();}
+    if(device == "mode")        {mode = command1.toInt();
+                                  Serial.print("mode set to ");Serial.println(mode);}
     
-    if(device == "G1")           {analogWrite(A21,command1.toInt());
+    if(device == "G1")          {analogWrite(A21,command1.toInt());
                                   galvo_position = command1.toInt();} //for manually setting the galvo (tuning etc.)                            
                                  
     if(device == "GM")          {if(command1.toInt()==1){galvo_override = true;}       
@@ -253,7 +255,8 @@ void respond(String device,String command1, String command2) {
     if(device == "verbose")     {if(command1.toInt()==1){verbose = true;}       
                                  if(command1.toInt()==0){verbose = false;}}
                                  
-    if(device == "hello")       {Serial.println("lasers");}       //handshake  
+    if(device == "hello")       {Serial.println("lasers");}       //handshake
+    if(device == "I2Ctest")     {Serial.println("I2C test command received");}       //handshake  
     if(device == "report")      {Serial.print("mode: ");Serial.println(mode);
                                  Serial.print("active wav: ");Serial.println(active_wavelength);
                                  Serial.print("active power: ");Serial.print(active_power);Serial.println("(16-bit)");

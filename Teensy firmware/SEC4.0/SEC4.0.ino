@@ -1,26 +1,39 @@
 #include "CRC.h"
 #define ETL Serial1
 #include <SPI.h>
+#include <i2c_t3.h>
+
+#define MEM_LEN 256
+char databuf[MEM_LEN];
 
 //definitions, flags etc.
 
-long unsigned prev_t    = 0;
-bool scan_when_ready    = false;
-bool filter_flag        = false;
-bool camera_flag        = false;
-bool laser_flag         = false;
-bool z_flag             = false;
-bool y_flag             = false;
-bool in_scan            = false;
-int filter_pin          = 0; 
-int camera_pin          = 0; 
-int laser_pin           = 0; 
-int z_pin               = 0; 
-int y_pin               = 0; 
-int z_separation        = 1;
-int z_number            = 50;
-int z_start             = 0;
-int exposure            = 10;
+long unsigned prev_t          = 0;
+bool scan_when_ready          = false;
+bool filter_flag              = false;
+bool camera_flag              = false;
+bool laser_on_flag            = false;
+long unsigned laser_off_time  = 0;
+bool z_flag                   = false;
+bool y_flag                   = false;
+bool in_scan                  = false;
+int LEDpin                    = 20;
+int laser_trigger_pin         = 36;
+const int DNreadyPin          = 35;
+const int slaveSelectPin      = 10;
+int TriggerPin                = 34; //incoming trigger from Scan Mirror
+int filter_pin                = 0; 
+int camera_pin                = 0; 
+int z_pin                     = 0; 
+int y_pin                     = 0; 
+int z_separation              = 1;
+int z_number                  = 50;
+int z_start                   = 0;
+int exposure                  = 10;
+int LED_status                = 0;
+
+uint8_t laser_board_I2C       = 0x66; // target I2C Slave address
+
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ETL functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -91,8 +104,7 @@ void ETLoffset(int OS){
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ LED functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-int LED_status = 0;
-int LEDpin = 20;
+
 
 void LEDon(){
   digitalWrite(20, HIGH);
@@ -108,9 +120,7 @@ void LEDoff(){
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ mirror functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-const int slaveSelectPin = 10;
-const int DNreadyPin = 35;
-int TriggerPin = 34;
+
 
 
 uint32_t generateSPFPR(float f) {
@@ -167,6 +177,53 @@ void mirrorTo(float pY, float pZ){
   //conditioning to make sure Y,Z are in range
   Serial.print(pY);Serial.print(" ");Serial.println(pZ);
   sendWriteSPI(0x50025102,generateSPFPR(pY),generateSPFPR(pZ));
+}
+//~~~~~~~~~~~~~~~~~~~~~~~~~~ Laser board communication ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+//timing
+void laser_trigger(int d){ //pulse duration (us), sets timer for laser to stay on
+  laser_off_time = micros() + d;
+  digitalWrite(laser_trigger_pin,1);
+  laser_on_flag = true;
+}
+
+void checkLaser(){ //gets checked continuously in main loop to turn laser off once timer expires
+  if(laser_on_flag){
+    if(micros() > laser_off_time){
+      digitalWrite(laser_trigger_pin,0);
+      laser_on_flag = false;
+    }
+  }
+}
+// communication over I2C
+
+void set_laser(int w,int p){ //wavelength and power to be used
+  Wire1.beginTransmission(laser_board_I2C);
+  Wire1.write("/");
+  Wire1.write(w);
+  Wire1.write(".");
+  Wire1.write(p);
+  Wire1.write(";");
+  Wire1.endTransmission();           // Transmit to Slave
+
+  // Check if error occured
+  if(Wire1.getError())
+      Serial.print("I2C comm FAIL\n");
+  else
+      Serial.print("I2C comm OK\n");
+}
+
+void test_I2C(){
+  Wire1.beginTransmission(laser_board_I2C);
+  Wire1.write("/I2Ctest;/stop;");
+  Wire1.endTransmission();           // Transmit to Slave
+
+  // Check if error occured
+  if(Wire1.getError())
+      Serial.print("I2C comm FAIL\n");
+  else
+      Serial.print("I2C comm OK\n");
 }
 
 
@@ -228,6 +285,9 @@ void respond(String device,String command1, String command2, String command3, St
     if(device == "Zoffset")                       {}
     if(device == "Ygain")                         {}
     if(device == "Zgain")                         {}
+
+//testing
+    if(device == "testI2C") {test_I2C();}
    
 }
 
@@ -241,31 +301,30 @@ void setup() {
   //mirror_handshake(); //TO DO 
   pinMode(slaveSelectPin,OUTPUT);
   pinMode(DNreadyPin,OUTPUT);
-  pinMode(TriggerPin,INPUT);
+  pinMode(TriggerPin,INPUT); //incoming trigger from Scan Mirror
+
+// Setup for I2C Master mode, pins 37/38, external pullups, 400kHz, 200ms default timeout
+  Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_37_38, I2C_PULLUP_EXT, 400000);
+  Wire1.setDefaultTimeout(200000); // 200ms
+  memset(databuf, 0, sizeof(databuf));
+  pinMode(laser_trigger_pin,OUTPUT);
+  
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ main loop ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 float y=0.0;
 void loop() {
   checkSerial();
+  checkLaser();   //check if laser should be on
 //  if(scan_when_ready){ //scan command received and hardware set in motion. 
-//                       //Monitor until all devices signal they are ready
+                       //Monitor until all devices signal they are ready
 //    if(digitalRead(filter_pin)) {filter_flag = true;}
 //    if(digitalRead(camera_pin)) {camera_flag = true;}
 //    if(digitalRead(laser_pin))  {laser_flag = true;}
 //    if(digitalRead(z_pin))      {z_flag = true;}
 //    if(digitalRead(y_pin))      {y_flag = true;}
 //    }
-//
-////  periodic maintanence tasks and status reports here
-//
-  if(millis() > prev_t + 100){
-  prev_t = millis();
-  y = y + 10;
-  if(y > 1000){y=-1000;}
-  mirrorTo(y/1000.0,0);
-  Serial.println(y);
-  }
+
 }
 
 
