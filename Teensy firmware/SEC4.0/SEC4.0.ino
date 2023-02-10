@@ -120,9 +120,6 @@ void LEDoff(){
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~ mirror functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-
 uint32_t generateSPFPR(float f) {
   float normalized;
   int16_t shift;
@@ -216,7 +213,7 @@ void set_laser(int w,int p){ //wavelength and power to be used
 
 void test_I2C(){
   Wire1.beginTransmission(laser_board_I2C);
-  Wire1.write("/I2Ctest;/stop;");
+  Wire1.write("/I2Ctest;");
   Wire1.endTransmission();           // Transmit to Slave
 
   // Check if error occured
@@ -261,15 +258,17 @@ void hablar(String parabla){
 void respond(String device,String command1, String command2, String command3, String command4, String command5) {
     if(device == "hello")                         {Serial.println("Raymond Driver Board");}
 // Scan command
-    if(device == "S")                             {
-        scan_when_ready = true;
-        setFilter(command1.toInt()); filter_flag = false;
-        exposure        = command2.toInt();
+    if(device == "s")                             { //for single scan
+        scan_when_ready = false;
+        
+        exposure        = command1.toInt();
         z_start         = command3.toInt();
         setZ(z_start); z_flag = false;
         z_number        = command4.toInt();
         z_separation    = command5.toInt(); 
     }//Scan command
+    if(device == "z")                             {} //for z-stack scan
+    
 // Illumination controls    
     if(device == "LEDon")                         {LEDon();}
     if(device == "LEDoff")                        {LEDoff();}

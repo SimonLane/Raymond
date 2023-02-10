@@ -16,7 +16,7 @@ void setup()
 //    pinMode(12,INPUT_PULLUP);       // Control for Send
 //    pinMode(11,INPUT_PULLUP);       // Control for Receive
 
-    // Setup for Master mode, pins 18/19, external pullups, 400kHz, 200ms default timeout
+    // Setup for Master mode, pins 37/38, external pullups, 400kHz, 200ms default timeout
     Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_37_38, I2C_PULLUP_EXT, 400000);
     Wire1.setDefaultTimeout(200000); // 200ms
 

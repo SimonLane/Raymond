@@ -120,28 +120,31 @@ class Laser{
 //make this wavelength the active wavelength
     ::active_wavelength = wavelength;
     ::active_power = power_value;
-// set analog  
-    ::setChannel(analog_channel,power_value);
-//set galvo
-    ::galvo_to(galvo_pin,galvo_on);
-//set digital
-    digitalWrite(digital_channel,1); 
     
+    if(mode==0){//if mode == 0, then the laser should be turned on by this command
+      ::setChannel(analog_channel,power_value); // set analog  
+      ::galvo_to(galvo_pin,galvo_on); //set galvo
+      if(digital_channel > 0){digitalWrite(digital_channel,1);} //set digital (except 405nm)
+    }
+    if(mode==1){//if mode == 1, then the laser should  be prepped only (turned on by trigger from main board)
+      if(digital_channel > 0){::setChannel(analog_channel,power_value);} // set analog (but not for 405)
+      ::galvo_to(galvo_pin,galvo_on); //set galvo
+    }
     Serial.println("");
   }
 };
 
 void galvo_to(int pin, int pos){
-  if(galvo_override == false){analogWrite(pin, pos);galvo_position = pos;}
+  analogWrite(pin, pos);galvo_position = pos;
 }
 /////////////////////////////////////////////INSTANSES/////////////////////////////////////////////
 
                 //wav  ach  dch  min  max     gOn   goff
-Laser        L405(405,  8,  -1,  0,   65535,  1701, 1200);
-Laser        L488(488,  9,  29,  0,   65535,  1701, 1200);
-Laser        L561(561,  10, 30,  0,   65535,  1701, 1200);
-Laser        L660(660,  11, 31,  0,   65535,  1701, 1200);
-Laser        L780(780,  0,  17,  0,   32767,  2500, 1200);
+Laser        L405(405,  8,  -1,  0,   65535,  130, 1200);
+Laser        L488(488,  9,  29,  0,   65535,  130, 1200);
+Laser        L561(561,  10, 30,  0,   65535,  130, 1200);
+Laser        L660(660,  11, 31,  0,   65535,  130, 1200);
+Laser        L780(780,  0,  17,  0,   32767,  2969,1200);
 
 void trigger_function(){                  //interrupt CHANGE
   int d = digitalRead(Trigger_IN);

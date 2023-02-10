@@ -13,21 +13,24 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtCore
 
 class laser_line():
-    def __init__(self, parent, wavelength, minV, maxV, minuW, maxuW, eqn, p1, p2):
-        self.parent = parent
-        self.wavelength = wavelength
-        self.min_value = minV
-        self.max_value = maxV
-        self.min_microWatt = minuW
-        self.max_microWatt = maxuW
-        self.equation_type = eqn
-        self.parameter_1 = p1
-        self.parameter_2 = p2
-        self.laser_on = False
-        self.firmware_verbose = False #Store whether the firmware was in verbose mode, set back when closing connection
-        self.percentage = 0
-        self.microWatts = 0
-        self.value_16   = 0
+    def __init__(self, parent, wavelength, minV, maxV, minuW, maxuW, eqn, p1, p2, g_on, g_off):
+        self.parent             = parent
+        self.wavelength         = wavelength
+        self.min_value          = minV
+        self.max_value          = maxV
+        self.min_microWatt      = minuW
+        self.max_microWatt      = maxuW
+        self.equation_type      = eqn
+        self.parameter_1        = p1
+        self.parameter_2        = p2
+        self.galvo_on           = g_on
+        self.galvo_off          = g_off
+        
+        self.laser_on           = False
+        self.firmware_verbose   = False #Store whether the firmware was in verbose mode, set back when closing connection
+        self.percentage         = 0
+        self.microWatts         = 0
+        self.value_16           = 0
         
         self.label                      = QtWidgets.QLabel('laser power:')
         self.channelSelect              = QtWidgets.QRadioButton()
@@ -58,6 +61,7 @@ class laser_line():
         if self.laser_on:#                           laser already on, turn off
             self.parent.changeLaser(wavelength = 0)
             self.parent.set_power(self.wavelength,0)
+            self.parent.galvo_value(self.galvo_off)
         else:                           #            laser off, turn on, and turn off all others
             self.parent.changeLaser(wavelength = self.wavelength)
             self.laser_on = True
@@ -69,6 +73,7 @@ class laser_line():
         self.label3.setText("(%.2f μW)"%w)
         if self.laser_on:
             self.parent.set_power(self.wavelength,v)
+            self.parent.galvo_value(self.galvo_on)
 
     def percent_to_16_bit(self): #percentage, 16-bit value, wattage    
         p = self.power_slider.value() #percentage
@@ -93,6 +98,12 @@ class laser_line():
 class Lasers(QtWidgets.QMainWindow):
     def __init__(self):
         super(Lasers, self).__init__()
+        
+     # ~~~~~~~~ GALVO PRESET BUTTONS ~~~~~~~~~ #
+        self.galvo_presets = [[130,'130-vis'],[1200,'1200-off'],[2969,'2969-maitai']]
+        
+        
+        
     # basic properties for the UI
         self.GUI_colour = QtGui.QColor(75,75,75)
         self.GUI_font   = QtGui.QFont('Times',10)
@@ -117,7 +128,6 @@ class Lasers(QtWidgets.QMainWindow):
                 l.box.setStyleSheet("background: lightgreen")
                 l.channelSelect.setChecked(True)
 
-    
     def set_power(self, w, v):
         if self.connection:
             s = "/%s.%s;\n" %(w,int(v))
@@ -127,9 +137,19 @@ class Lasers(QtWidgets.QMainWindow):
     def shutter(self):
         if self.connection:
             self.teensy.write(b'/stop;\n')
-#            print("stop")
+            self.galvo_value(self.galvo_presets[1][0])
         self.changeLaser() #use this to turn off all lines from the GUI pov
-
+        
+    
+    def galvo_value(self, value):
+        # update the widgets
+        self.g_spinbox.setValue(value)
+        self.galvo_slider.setValue(value)
+        # send to hardware
+        s = "/G1.%s;\n" %(value)
+        self.teensy.write(bytes(s,'utf-8'))
+        print('sending command: ',s)
+        
     def initUI(self):
         self.setGeometry(0, 50, 300, 1500) # doesn't work, why?
         self.setWindowTitle('Laser Controller')
@@ -148,7 +168,12 @@ class Lasers(QtWidgets.QMainWindow):
             l = self.dataframe.iloc[row, :]
             self.lasers.append(l)
             #               ['Wav.','Min.V','Max.V','Min.uW','Max.uW','Eqn.','P.1','P.2']
-            self.lines.append(laser_line(self,l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7]))
+            if int(l[0]) < 650: # visible line
+                self.lines.append(laser_line(self,l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7],
+                                             self.galvo_presets[0][0], self.galvo_presets[1][0]))
+            else:
+                self.lines.append(laser_line(self,l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7],
+                                             self.galvo_presets[2][0], self.galvo_presets[1][0]))
         
         self.button_group = QtWidgets.QButtonGroup()
         for l in self.lines:
@@ -167,26 +192,32 @@ class Lasers(QtWidgets.QMainWindow):
         self.galvo_slider.setMaximum(4095)
         self.galvo_slider.setTickInterval(100)
         self.galvo_slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.galvo_slider.setValue(2100)
-        self.galvo_slider.setEnabled(False)
+        self.galvo_slider.setValue(1200)
+        self.galvo_slider.setEnabled(True)
         self.galvo_slider.valueChanged.connect(lambda: self.galvo_value(self.galvo_slider.value()))
-        self.galvo_checkbox             = QtWidgets.QCheckBox('Manual Override')
-        self.galvo_checkbox.setChecked(False)
-        self.galvo_checkbox.stateChanged.connect(self.manual_galvo)
         self.g_spinbox                  = QtWidgets.QSpinBox()
         self.g_spinbox.setRange(0,4095)
         self.g_spinbox.setSingleStep(1)
-        self.g_spinbox.setValue(2000)
+        self.g_spinbox.setValue(1200)
         self.g_spinbox.editingFinished.connect(lambda: self.galvo_value(self.g_spinbox.value()))
-        self.g_spinbox.setEnabled(False)
+        self.g_spinbox.setEnabled(True)
+        
+        self.g_pb0                  = QtWidgets.QPushButton(self.galvo_presets[0][1])
+        self.g_pb0.released.connect(lambda: self.galvo_value(self.galvo_presets[0][0]))
+        self.g_pb1                  = QtWidgets.QPushButton(self.galvo_presets[1][1])
+        self.g_pb1.released.connect(lambda: self.galvo_value(self.galvo_presets[1][0]))
+        self.g_pb2                  = QtWidgets.QPushButton(self.galvo_presets[2][1])
+        self.g_pb2.released.connect(lambda: self.galvo_value(self.galvo_presets[2][0]))
 
+        
         self.g_box                      = QtWidgets.QGroupBox('Galvo 1') #main container
         self.g_box.setStyleSheet("background: lightgrey")
         self.g_box.setLayout(QtWidgets.QGridLayout())
         self.g_box.layout().addWidget(self.galvo_slider,              0,0,1,9)
         self.g_box.layout().addWidget(self.g_spinbox,                 1,6,1,2)
-        self.g_box.layout().addWidget(self.galvo_checkbox,            1,0,1,2)
-
+        self.g_box.layout().addWidget(self.g_pb0,                     1,0,1,2)
+        self.g_box.layout().addWidget(self.g_pb1,                     1,2,1,2)
+        self.g_box.layout().addWidget(self.g_pb2,                     1,4,1,2)
         
 # =============================================================================
 # # settings tab
@@ -287,32 +318,14 @@ class Lasers(QtWidgets.QMainWindow):
             self.teensy.close()
             self.connection = False
             self.connectionStatus.setText('No connection')
-    
-    def manual_galvo(self):
-        if self.galvo_checkbox.isChecked(): #override galvo
-            self.galvo_slider.setEnabled(True)
-            self.g_spinbox.setEnabled(True)
-            self.teensy.write(bytes("/GM.1;\n",'utf-8'))
-        else:                               #normal galvo function
-            self.galvo_slider.setEnabled(False)
-            self.g_spinbox.setEnabled(False)
-            self.teensy.write(bytes("/GM.0;\n",'utf-8'))
-    
+
     def I2Cmode(self):
         if self.ILboardMode.isChecked():
             self.teensy.write(bytes("/mode.1;\n",'utf-8'))
         else:
             self.teensy.write(bytes("/mode.0;\n",'utf-8'))
             
-            
-            
-    def galvo_value(self, value):
-        # update the widgets
-        self.g_spinbox.setValue(value)
-        self.galvo_slider.setValue(value)
-        # send to hardware
-        s = "/G1.%s;\n" %(value)
-        self.teensy.write(bytes(s,'utf-8'))
+   
     
     def closeEvent(self, event):
         if self.connection:

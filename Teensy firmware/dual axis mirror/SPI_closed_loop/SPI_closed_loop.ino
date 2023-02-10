@@ -1,3 +1,7 @@
+// This test script uses the main microscope control board to drive the scan mirror to perform a z-stack
+// also controls the laser board to turn on/off between z-scans 
+// not yet implemented laser (trigger) control between single scans
+
 #include <SPI.h>
 #include <i2c_t3.h>
 #define MEM_LEN 256
@@ -7,6 +11,7 @@ const int slaveSelectPin = 10;
 const int slaveReadyPin = 35;
 const int trigger_pin_SM = 34; //trigger pin for scan mirror
 const int trigger_pin_IB = 36; //trigger pin for illumination board
+const int trigger_pin_cam = 25; //trigger pin to start camera acquisition
 uint8_t data;
 uint8_t target = 0x66;        //I2C address for illumination board
 
@@ -21,6 +26,7 @@ void setup() {
   pinMode (slaveSelectPin, OUTPUT);
   pinMode (2, OUTPUT);
   pinMode (13, OUTPUT);
+  pinMode (trigger_pin_cam, OUTPUT); 
   pinMode (slaveReadyPin, INPUT);
   pinMode (trigger_pin_SM, OUTPUT);
   pinMode (trigger_pin_IB, OUTPUT);
@@ -29,56 +35,101 @@ void setup() {
   delay(1000);
 
 //INPUT stage
-  sendWriteSPI(0x40005102,0x60,generateSPFPR(1));       //Select signal generator as active input for X and static for Y axis (start at top of FOV (1))
-  sendWriteSPI(0x60006100,0x02,0x02);                     //Configure both axes signal unit (02: XY units; 01: OF units; 00: current) OF = optical feedback
-  sendWriteSPI(0x60026003,0x03,generateSPFPR(1));       //Configure signal shape & Hz (04: Pulse; 03: sawtooth; 02: Square; 01: Triangle; 00: sinusolidal)
-  sendWriteSPI(0x60046007,generateSPFPR(1.0),0x01);       //Configure Amplitude and cycles (Single point floating representations)
-                                                          //Cycles (int) - 0x8001 = (dec)-1 = infinte
-  sendWriteSPI(0x60096109,0x01,0x00);                     //external trigger
-  sendWriteSPI(0x60016101,0x01,0x01);                     //Set run flag, both axes
+  sendWriteSPI(0x40005102,0x60,generateSPFPR(1));   //Select signal generator as active input for X and static for Y axis (start at top of FOV (1))
+  sendWriteSPI(0x60006100,0x02,0x02);               //Configure both axes signal unit (02: XY units; 01: OF units; 00: current) OF = optical feedback
+  sendWriteSPI(0x60026003,0x03,generateSPFPR(0.5)); //Configure signal shape & Hz (04: Pulse; 03: sawtooth; 02: Square; 01: Triangle; 00: sinusolidal)
+                                                     // FOV is 0.3 of the full (-1 to 1) scan range, so 1s exposure requires 0.3Hz
+  sendWriteSPI(0x60046007,generateSPFPR(1.0),0x01);  //Configure Amplitude and cycles (Single point floating representations)
+                                                     //Cycles (int) - 0x8001 = (dec)-1 = infinte
+  sendWriteSPI(0x60096109,0x01,0x00);                //external trigger
+  sendWriteSPI(0x60016101,0x01,0x01);                //Set run flag, both axes
 //CONDITIONING stage  
-  sendWriteSPI(0x98009801,generateSPFPR(0.075),generateSPFPR(-0.008));      // X  (Gain, Offset), X uses only +ve side and 
-                                                                           // is wider than FOV:                           FOV[+0.2 to +0.8]
-  sendWriteSPI(0x99009901,generateSPFPR(0.025),generateSPFPR(0.045));      // Y  (Gain, Offset), Y is symetrical and full 
-                                                                           // height of FOV:                               FOV[-1 to +1]
+  sendWriteSPI(0x98009801,generateSPFPR(0.05),generateSPFPR(0.0050));      // X  (Gain, Offset), X uses only +ve side and 
+                                                                           // is wider than FOV:    FOV[+0.2 to +0.8]
+  sendWriteSPI(0x99009901,generateSPFPR(0.01),generateSPFPR(0.041));     // Y  (Gain, Offset), Y is symetrical and full 
+                                                                           // height of FOV:        FOV[-1 to +1]
 //CONTROL stage  
   sendWriteSPI(0x40024007,0xC0,0xC0);       //Activate closed loop control for both axes
 }
 
 float z = 1.0;
 
-void loop(){
-  
-  //laser on
-  Serial.println("laser on");
-  Wire1.beginTransmission(target);   // Slave address
-  Wire1.write("/660.50000;"); 
-  Wire1.endTransmission();
-  digitalWrite(trigger_pin_IB,1);
-  while(z>-1){
-    
-    //set Y (Z axis)
-    sendWriteSPI(0x51020000,generateSPFPR(z),0x00); //set z position
-    
-    // Trigger the scan mirror to start sweep
-    digitalWrite(trigger_pin_SM,1);
-    delay(1);
-    digitalWrite(trigger_pin_SM,0); 
-    Serial.println(z);
-    z=z-0.05;
+void trigger_scan_mirror(){
+  digitalWrite(trigger_pin_SM,1);
+  delayMicroseconds(100);
+  digitalWrite(trigger_pin_SM,0);
+}
 
-    digitalWrite(36,0);delay(100);
-    digitalWrite(36,1);delay(300);
-    digitalWrite(36,0);delay(0);
+void trigger_camera(){
+  digitalWrite(trigger_pin_cam,1);
+  delayMicroseconds(10);
+  digitalWrite(trigger_pin_cam,0);
+}
+
+void set_z(int z){
+  sendWriteSPI(0x51020000,generateSPFPR(0),0x00); //set z position
+}
+
+bool flag1 = false;
+bool flag2 = false;
+bool flag3 = false;
+bool flag4 = false;
+
+long unsigned next_start = millis();
+
+void loop(){
+  if(millis() > next_start + 1500){
+    next_start = millis();
+    Serial.print("0-");
+    Serial.println(millis());
+    
+    flag1 = false;
+    flag2 = false;
+    flag3 = false;
+    flag4 = false;
+    }
+
+  if(millis() > next_start + 0){
+    
+    if (flag1==false){
+      trigger_scan_mirror();
+      flag1=true;
+      Serial.print("1-");
+      Serial.println(millis());
+    }
   }
-  z=1;
-  //laser off
-  Serial.println("laser off");
-  Wire1.beginTransmission(target);   // Slave address
-  Wire1.write("/660.0;"); 
-  Wire1.endTransmission();
+
+  if(millis() > next_start + 0){ 
+    
+    if (flag2==false){
+      digitalWrite(trigger_pin_IB,1);  // laser on
+      flag2 = true;
+      Serial.print("2-");
+      Serial.println(millis());
+    }
+  }
+
+  if(millis() > next_start + 0){
+    
+    if (flag3==false){
+      trigger_camera();  // start exposure
+      flag3 = true;
+      Serial.print("3-");
+      Serial.println(millis());
+    }
+  }
   
-  delay(500);
+  if(millis() > next_start + 400){
+    
+    if (flag4==false){
+      digitalWrite(trigger_pin_IB,0);  // laser off
+      set_z(0);
+      flag4 = true;
+      Serial.print("4-");
+      Serial.println(millis());
+    }
+  }  
+
 }
 
 void sendWriteSPI(uint32_t registers, uint32_t valueX, uint32_t valueY){

@@ -53,6 +53,7 @@ class Camera_TL(QtGui.QWidget):
         self.camera.operation_mode = 0      #SOFTWARE_TRIGGERED
         self.camera.arm(2)                 # set buffer to hold 2 images
         self.camera.issue_software_trigger()
+        
     
     def stop_live(self):
         self.camera.disarm()

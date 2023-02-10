@@ -31,6 +31,9 @@ f           = 1               # scan mirror freq. (Hz) TO DO - calc. from exposu
 # =============================================================================
 # LASERS
 # =============================================================================
+
+# FUNCTIONS 
+
 def manual_galvo(): laser_board.write(bytes("/GM.1;\n",'utf-8'))
 def auto_galvo(): laser_board.write(bytes("/GM.0;\n",'utf-8'))
           
@@ -49,7 +52,7 @@ def set_power(w, v):
 def shutter():
     laser_board.write(b'/stop;\n')
 
-# CONNECTION to lasers
+# CONNECTION 
 
 laser_board = serial.Serial(port=laser_com, baudrate=115200, timeout=0.5)
 time.sleep(1) #essential to have this delay!
@@ -70,19 +73,14 @@ elif  b'Over Serial' in reply:
     laser_board.close()
     time.sleep(0.5)
     print('close connection')
+    
+I2Cmode()  # open board to I2C communications so it can be driven by the main control board
 
 # =============================================================================
 # CAMERA
 # =============================================================================
 
-SDK = TLCameraSDK()
-TLcameras = SDK.discover_available_cameras()
-if len(TLcameras) == 0:
-    print('Error connecting to %s: Camera not found'%(cam_name))               
-else:
-    camera = SDK.open_camera(TLcameras[0])
-    
-    print('Connected to %s: '%(cam_name))
+# FUNCTIONS 
             
 def exposure(e):
         #convert milli to micro and set exposure time
@@ -109,10 +107,35 @@ def grab_frame():
         print('error getting frame from buffer')
         return None
 
+# CONNECTION 
 
+SDK = TLCameraSDK()
+TLcameras = SDK.discover_available_cameras()
+if len(TLcameras) == 0:
+    print('Error connecting to %s: Camera not found'%(cam_name))               
+else:
+    camera = SDK.open_camera(TLcameras[0])
+    
+    print('Connected to %s: '%(cam_name))
+    
 # =============================================================================
 # MAIN BOARD
 # =============================================================================
+
+# FUNCTIONS
+
+def single_scan(e,w,p):
+#~~~~~~~~CAMERA~~~~~~~~#
+    # set up the camera for exposure time e, external trigger
+    ext_mode()
+    exposure(e)
+#~~~~~~~~MAIN BOARD~~~~~~~~#
+# setup the mirror for single scans with Frequency f and amplitude a, external trigger
+# power p, and wavelength w, laser off, external trigger
+# send  commands via Teensy board? Y
+    #microscope_board.write(b'/s.%s.%s.%s.%s.%s;\n' %(e,w,p,a,f)) 
+    
+# CONNECTION 
 
 microscope_board = serial.Serial(port=microscope_com, baudrate=115200, timeout=0.5)
 time.sleep(1) #essential to have this delay!
@@ -122,17 +145,7 @@ print('microscope reply: ', reply)
 if reply == b'Raymond Driver Board':
     print('connection established')
 
-def single_scan(e,w,p,a,f):
-#~~~~~~~~CAMERA~~~~~~~~#
-    # set up the camera for exposure time e, external trigger
-    ext_mode()
-    exposure(e)
-#~~~~~~~~MAIN BOARD~~~~~~~~#
-# setup the mirror for single scans with Frequency f and amplitude a, external trigger
-# power p, and wavelength w, laser off, external trigger
-# send  commands via Teensy board? Y
-    microscope_board.write(b'/scan.%s.%s.%s.%s.%s;\n' %(e,w,p,a,f)) 
-    
+
 
 # =============================================================================
 # acqusition
@@ -142,9 +155,12 @@ def single_scan(e,w,p,a,f):
 laser_board.write(bytes("/verbose.0;\n",'utf-8')) # turn off verbose mode
 laser_board.write(bytes("/mode.1;\n",'utf-8')) # will now accept I2C commands from the main board
  # send info to the Main board to trigger the hardware
-single_scan(e,w,p,a,f)
+#single_scan(e,w,p,a,f)
  # allow time for exposure and readout
 time.sleep(frame_time/1000) 
+
+# wait for frame to be available
+
  # grab the frame
 frame = grab_frame()
  # format the frame
@@ -158,7 +174,8 @@ plt.show()
 # make safe and close connections 
 # =============================================================================
 
-laser_board.shutter()
+shutter()                                       #turn off all lasers, galvo to safe position
+Serialmode()                                    #prevent laser board responding to I2C commands from main board
 laser_board.close()
 print('close connection to laser board')
 camera.dispose()
