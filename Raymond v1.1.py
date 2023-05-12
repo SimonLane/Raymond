@@ -176,14 +176,14 @@ class Raymond(QtWidgets.QMainWindow):
 # =============================================================================
 # Data Structures
 # =============================================================================
-
+    
         #Stores al imaging settings, populated from file stored in user folder
         self.ImagingSets = pd.DataFrame()
         #Stores user selected stage positions, can also be loaded from a file (in case of crash)
         self.PositionList = [] 
         
 # ~~~~~~~~~~~~~~~end~~~~~~~~~~~~~~
-
+        
 # build the UI
         self.initUI()
         self.information("Loaded GUI from: %s" %(__file__), 'g')
@@ -197,6 +197,9 @@ class Raymond(QtWidgets.QMainWindow):
 # # connect to devices
 # =============================================================================
         if not self.demo_mode:
+         # ASI Stage
+            self.stage          = Stage_ASI(self, 'ASI Stage', 'COM9')
+            self.stage.connect()
         # ThorLabs
             self.TLsdk = TLCameraSDK()
             self.camera1        = Camera_TL(self, 'CS2100-M-1', 0, self.TLsdk)
@@ -207,9 +210,7 @@ class Raymond(QtWidgets.QMainWindow):
         # Point Grey
             self.camera3        = Camera_PG(self, 'Chameleon3')
             self.camera3.connect()
-        # ASI Stage
-            self.stage          = Stage_ASI(self, 'ASI Stage', 'COM9')
-            self.stage.connect()
+       
 #  setup current user
             self.BasicSettings = pd.read_csv(self.BSmemory, index_col=0)# open settings file
             i = self.FileUserList.findText(self.BasicSettings.at[0,'LastUser'])# get the last user
@@ -599,6 +600,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.MainArea.setLineWidth(self.border_size)
         self.MainArea.setLayout(OverallLayout)
         self.setCentralWidget(self.MainArea)
+        
 
 # =============================================================================
 #   Main imaging Loop - Setup
@@ -1536,6 +1538,7 @@ class Raymond(QtWidgets.QMainWindow):
         self.positionsToDisk()
         
 if __name__ == '__main__':
+    app = 0
     app = QtWidgets.QApplication(sys.argv)
     gui = Raymond()
     gui.show()

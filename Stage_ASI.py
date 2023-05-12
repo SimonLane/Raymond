@@ -24,7 +24,7 @@ class Stage_ASI(QtGui.QWidget):
         self.start_position     = [0,0,-2000]
         self.escape_position    = [0,-2000,-10000]
         self.prev_position      = [0,0,-2000]
-        self.baudrate=115200
+        self.baudrate           = 115200
     
     def connect(self):
         try:
@@ -34,7 +34,7 @@ class Stage_ASI(QtGui.QWidget):
      
 #            set some defaults
             self.ASI.write(b"UM X=10000 Y=10000 Z=10000\r")  #(per mm) set the movement units to tenths µm(default is 10000, tenths of µm)
-            self.ASI.write(b"R X=0 Y=0 Z=0\r")              # Relative move - Convert to tenths of µm, default 1 micron
+            self.ASI.write(b"R X=0 Y=0 Z=0\r")               # Relative move - Convert to tenths of µm, default 1 micron
             self.ASI.write(b'RT Y=0.1\r')                    # TTL pulse width
             self.ASI.write(b'AC Z=10\r')                     # Acceleration (ms to reach max speed)
             self.ASI.write(b'TTL X=2 Y=2 F=1\r')             # TTL modes
@@ -138,7 +138,7 @@ class Stage_ASI(QtGui.QWidget):
             self.position = p
             return p
         else: 
-#            returns position in µm
+    #            returns position in µm
             return self.get_position()
 
     def backlash_compensation(self, value):

@@ -1,6 +1,6 @@
 // This test script uses the main microscope control board to drive the scan mirror to perform a z-stack
 // also controls the laser board to turn on/off between z-scans 
-// laser (trigger) control between single scans
+// not yet implemented laser (trigger) control between single scans
 
 #include <SPI.h>
 #include <i2c_t3.h>
@@ -35,13 +35,14 @@ void setup() {
   delay(1000);
 
 //INPUT stage
-  sendWriteSPI(0x40005102,0x68,generateSPFPR(0));   //Select vector pattern as active input for X and static for Y axis & set Y position to 0)
-  sendWriteSPI(0x68006100,0x02,0x02);               //Configure both axes signal unit (02: XY units; 01: OF units; 00: current) OF = optical feedback
-  //Configure Vector map
-  sendWriteSPI(0x68026803,0,74);                 // start and end index of vector (0-74, or 100-821)[set to match exposure]
-  sendWriteSPI(0x68076808,0x01,0x01);               // n Cycles (1), External Trigger (1=True)
-  sendWriteSPI(0x68046801,1600,0x01);               // Hz (480)[set to match exposure], Run (1=True)
-  
+  sendWriteSPI(0x40005102,0x60,generateSPFPR(1));   //Select signal generator as active input for X and static for Y axis (start at top of FOV (1))
+  sendWriteSPI(0x60006100,0x02,0x02);               //Configure both axes signal unit (02: XY units; 01: OF units; 00: current) OF = optical feedback
+  sendWriteSPI(0x60026003,0x03,generateSPFPR(0.5)); //Configure signal shape & Hz (04: Pulse; 03: sawtooth; 02: Square; 01: Triangle; 00: sinusolidal)
+                                                     // FOV is 0.3 of the full (-1 to 1) scan range, so 1s exposure requires 0.3Hz
+  sendWriteSPI(0x60046007,0x8001,0x01);  //Configure Amplitude and cycles (Single point floating representations)
+                                                     //Cycles (int) - 0x8001 = (dec)-1 = infinte
+  sendWriteSPI(0x60096109,0x01,0x00);                //external trigger
+  sendWriteSPI(0x60016101,0x01,0x01);                //Set run flag, both axes
 //CONDITIONING stage  
   sendWriteSPI(0x98009801,generateSPFPR(0.05),generateSPFPR(0.0050));      // X  (Gain, Offset), X uses only +ve side and 
                                                                            // is wider than FOV:    FOV[+0.2 to +0.8]
@@ -77,7 +78,7 @@ bool flag4 = false;
 long unsigned next_start = millis();
 
 void loop(){
-  if(millis() > next_start + 1000){
+  if(millis() > next_start + 1500){
     next_start = millis();
     Serial.print("0-");
     Serial.println(millis());
@@ -108,7 +109,7 @@ void loop(){
     }
   }
 
-  if(millis() > next_start + 20){
+  if(millis() > next_start + 0){
     
     if (flag3==false){
       trigger_camera();  // start exposure
@@ -118,7 +119,7 @@ void loop(){
     }
   }
   
-  if(millis() > next_start + 40){
+  if(millis() > next_start + 400){
     
     if (flag4==false){
       digitalWrite(trigger_pin_IB,0);  // laser off

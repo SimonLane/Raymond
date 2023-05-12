@@ -237,7 +237,7 @@ void respond(String device,String command1, String command2) {
                                   if(galvo_override==false){analogWrite(A21,shutter_close);}
                                   setAlltoZero();
                                   }       
-    if(device == "405")         {L405.power(command1.toInt());}    //receive power as a percentage 
+    if(device == "405")         {L405.power(command1.toInt());}    //receive power as a percentage or 16-bit value? 
     if(device == "488")         {L488.power(command1.toInt());}
     if(device == "561")         {L561.power(command1.toInt());}
     if(device == "660")         {L660.power(command1.toInt());}
