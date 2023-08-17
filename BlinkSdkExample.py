@@ -2,15 +2,70 @@
 # Meadowlark Optics Spatial Light Modulators
 # September 12 2019
 
-import os
-import numpy
-from ctypes import cdll, CDLL, c_uint, POINTER, c_ubyte
+import os, serial, time
+import numpy as np
+from ctypes import cdll, CDLL, c_uint, POINTER, c_ubyte, c_float
 from scipy import misc
 from time import sleep
+import pandas as pd
+import ctypes
 
 ################################ MAKE SURE THE WINDOW SHOWS UP IN THE WRITE PLACE FOR THE DPI SETTINGS#############
-# Query DPI Awareness (Windows 10 and 8)
-import ctypes
+
+
+
+
+def set_power(w, p):
+    v = get_val16(w,p) #convert percentage to 16-bit DAC value
+    s = "/%s.%s;\n" %(w,int(v))
+    laser_board.write(bytes(s,'utf-8')) # send the 16-bit value for the DAC
+    print("sending laser command: %s" %s)
+
+def get_val16(w,p): #supply wavelength and percentage to retreive the DAC value
+    for r in lasers:
+        print(r[0])
+        if w == r[0]:
+            # print(w,'is', r[0], 'Min lase value is', r[1])
+            DAC = ((2**16 - r[1]) * (p/100)) + r[1]
+            return DAC    
+# =============================================================================
+# # LASER 
+# =============================================================================
+lasers = [] 
+laser_com       = 'COM10'
+address = "/Users/Ray Lee/Documents/GitHub/Raymond/"
+
+laser_board = serial.Serial(port=laser_com, baudrate=115200, timeout=0.5)
+time.sleep(1) #essential to have this delay!
+laser_board.write(b'/hello;\n')                     #handshake
+reply = laser_board.readline().strip()
+print('laser reply: ', reply)
+if reply == b'lasers':
+    print('connected to laser board')
+    #put the illuminiation board into mode 0 (turns off the trigger)
+    laser_board.write(bytes("/mode.0;\n",'utf-8'))
+elif  b'Over Serial' in reply:
+    print('verbose mode detected')
+    #The laser control board is in verbose mode, needs to not be for serial communication.
+    laser_board.write(bytes("/verbose.0;\n",'utf-8'))   #turn off verbose mode 
+    print('verbose mode off command')
+    reply = laser_board.readline().strip()
+    print(reply)
+    laser_board.close()
+    print('close connection')
+
+# laser data
+dataframe = pd.read_csv("%sLaserCalibration.txt" %(address), header=0, index_col=0, sep ='\t')
+for row in range(dataframe.shape[0]):
+    l = dataframe.iloc[row, :]
+    lasers.append(l)
+    #['Wav.','Min.V','Max.V','Min.uW','Max.uW','Eqn.','P.1','P.2']    
+
+
+
+# =============================================================================
+# SLM
+# =============================================================================
 
 awareness = ctypes.c_int()
 errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
@@ -71,11 +126,11 @@ else:
 	print("LoadLUT Failed")
 	
 # Create two vectors to hold values for two SLM images
-ImageOne = numpy.empty([width.value*height.value*bytpesPerPixel], numpy.uint8, 'C');
-ImageTwo = numpy.empty([width.value*height.value*bytpesPerPixel], numpy.uint8, 'C');
+ImageOne = np.empty([width.value*height.value*bytpesPerPixel], np.uint8, 'C');
+ImageTwo = np.empty([width.value*height.value*bytpesPerPixel], np.uint8, 'C');
 
 # Create a blank vector to hold the wavefront correction
-WFC = numpy.empty([width.value*height.value*bytpesPerPixel], numpy.uint8, 'C');
+WFC = np.empty([width.value*height.value*bytpesPerPixel], np.uint8, 'C');
 
 # Generate phase gradients
 VortexCharge = 5;
@@ -85,12 +140,40 @@ VortexCharge = 3;
 image_lib.Generate_LG(ImageTwo.ctypes.data_as(POINTER(c_ubyte)), WFC.ctypes.data_as(POINTER(c_ubyte)), 
                       width.value, height.value, depth.value, VortexCharge, center_x.value, center_y.value, 0, RGB);
 
+# test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#image_lib.Generate_Hologram.argtypes = ctypes.c_ubyte,ctypes.c_ubyte, ctypes.c_float,ctypes.c_float,ctypes.c_float,ctypes.c_float,ctypes.c_int,ctypes.c_int
+
+iterations = 5 # number of iterations used to generate the hologram
+RGB = True # True for HDMI interface
+image_lib.Initialize_HologramGenerator(width, height, depth, iterations, RGB)
+
+
+x_locations = np.arange(-100.0, 200.0, 100.0, dtype=np.float32)
+y_locations = np.arange(-100.0, 200.0, 100.0, dtype=np.float32)
+z_locations = np.arange(-100.0, 200.0, 100.0, dtype=np.float32)
+
+image_lib.Generate_Hologram(ImageOne.ctypes.data_as(POINTER(c_ubyte)), 
+                            WFC.ctypes.data_as(POINTER(c_ubyte)),
+                            x_locations.ctypes.data_as(POINTER(c_float)),
+                            y_locations.ctypes.data_as(POINTER(c_float)),
+                            z_locations.ctypes.data_as(POINTER(c_float)),
+                            ctypes.c_int(1),  # intensities
+                            ctypes.c_int(len(x_locations)),  #length of array/number of points
+                            ctypes.c_int(0))
+
+# end test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+set_power(488, 5)     # (wavelngth, percentage)
+
+
 # Loop between our images
 for x in range(2):
     slm_lib.Write_image(ImageOne.ctypes.data_as(POINTER(c_ubyte)), is_eight_bit_image);
-    sleep(1.0); # This is in seconds
+    sleep(0.5); # This is in seconds
     slm_lib.Write_image(ImageTwo.ctypes.data_as(POINTER(c_ubyte)), is_eight_bit_image);
-    sleep(1.0); # This is in seconds
+    sleep(0.5); # This is in seconds
 
 # Always call Delete_SDK before exiting
 slm_lib.Delete_SDK();
+laser_board.write(b'/stop;\n')
+laser_board.close()
