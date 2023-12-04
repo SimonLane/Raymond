@@ -62,7 +62,7 @@ def connect_camera():
 
     # Set Exposure Time 
     node_exposure_time = PySpin.CFloatPtr(nodemap.GetNode('ExposureTime'))
-    node_exposure_time.SetValue(10000)
+    node_exposure_time.SetValue(5000)
     return system, cam, cam_list
 
   
@@ -135,11 +135,10 @@ ImageTwo = np.empty([width.value*height.value*bytpesPerPixel], np.uint8, 'C');
 
 
 #start camera
-if(do_cam):
-    system, cam, cam_list = connect_camera() 
-    set_trigger_software(cam) 
-    cam.BeginAcquisition()
-    node_softwaretrigger_cmd = PySpin.CCommandPtr(cam.GetNodeMap().GetNode('TriggerSoftware'))
+system, cam, cam_list = connect_camera() 
+set_trigger_software(cam) 
+cam.BeginAcquisition()
+node_softwaretrigger_cmd = PySpin.CCommandPtr(cam.GetNodeMap().GetNode('TriggerSoftware'))
 
 # =============================================================================
 # # LASER 
@@ -164,15 +163,16 @@ elif  b'Over Serial' in reply:
     print('close connection')
 
 # laser data
-dataframe = pd.read_csv("%sLaserCalibration.txt" %(address), header=0, index_col=0, sep ='\t')
-for row in range(dataframe.shape[0]):
-    l = dataframe.iloc[row, :]
-    lasers.append(l)
-    #['Wav.','Min.V','Max.V','Min.uW','Max.uW','Eqn.','P.1','P.2']
+# dataframe = pd.read_csv("%sLaserCalibration.txt" %(address), header=0, index_col=0, sep ='\t')
+# for row in range(dataframe.shape[0]):
+#     l = dataframe.iloc[row, :]
+#     lasers.append(l)
+#     #['Wav.','Min.V','Max.V','Min.uW','Max.uW','Eqn.','P.1','P.2']
 
 # turn on laser
-set_power(488, 5)     # (wavelngth, percentage)
-sleep(1)
+laser_board.write(bytes('/488.8323;','utf-8'))     # (wavelngth, percentage)
+sleep(0.2)
+
 
 # =============================================================================
 # generate images for SLM
@@ -183,16 +183,22 @@ Zs = []
 Is = []
 n = 0
 step = 45
-range = step*6
+range = 270
+target_image = np.zeros((1200, 1920), dtype='uint8')
+for x in np.arange(int(600 - (range/2)), int(600 + (range/2)+step), step):
+    for y in np.arange(int(960 - (range/2)), int(960 + (range/2)+step), step):
+        for x2 in [-4,-3,-2,-1,0,1,2,3,4]:
+            for y2 in [-4,-3,-2,-1,0,1,2,3,4]:
+                Xs.append(x+x2)
+                Ys.append(y+y2)
+                Zs.append(0)
+                Is.append(1)
+                n+=1
+                target_image[x+x2,y+y2] = 255
+        
 
-for x in np.arange(int(center_x.value - (range/2)), int(center_x.value + (range/2)+step), step):
-    for y in np.arange(int(center_y.value - (range/2)), int(center_y.value + (range/2)+step), step):
-        Xs.append(x)
-        Ys.append(y)
-        Zs.append(0)
-        Is.append(1)
-        n+=1
-       
+plt.imshow(target_image)
+plt.show()
 # convert to ctype
 XSpots = np.array(Xs, dtype='f');
 YSpots = np.array(Ys, dtype='f');
@@ -227,45 +233,52 @@ save_as = '%s/pyGenLens.bmp' %image_dir
 imageio.imwrite(save_as, np.reshape(ImageTwo.copy(), (1200,1920,4)))
 
 # superimpose
-
 Super = (ImageOne + ImageTwo) % 255
 out = np.reshape(Super.copy(), (1920 * 1200,4))[:,0]
 
+
+save_as = '%s/pySuper.bmp' %image_dir
+imageio.imwrite(save_as, np.reshape(Super.copy(), (1200,1920,4)))
 # =============================================================================
 #  Write images to SLM
 # =============================================================================
-
-print('create image in python') # image generated on the fly
-slm_lib.Write_image(Super.copy().ctypes.data_as(POINTER(c_ubyte)), 1)
-# sleep(1)
-if(do_cam): node_softwaretrigger_cmd.Execute() # trigger camera
-sleep(1)
-if(do_cam): 
-    image_result = cam.GetNextImage(10500) # Get frame
-    image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
-    filename = "SLM generated.jpg"
-    image_converted.Save(filename)
-
-    image_result.Release() 
-
 
 print('write bmp directly') # import image from a file
 test_image = imageio.imread(os.path.join(image_dir, 'centergrid_FL+200.bmp'))
 new_image = np.reshape(test_image[:,:,0].copy(), 1200*1920)
 slm_lib.Write_image(new_image.ctypes.data_as(POINTER(c_ubyte)), 1)
 sleep(1)
-if(do_cam): node_softwaretrigger_cmd.Execute() # trigger camera
+node_softwaretrigger_cmd.Execute() # trigger camera
 sleep(1)
-if(do_cam): 
-    image_result = cam.GetNextImage(10500) # Get frame
-    image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
-    filename = "SLM from image.jpg"
-    image_converted.Save(filename)
+image_result = cam.GetNextImage(5500) # Get frame
+image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
+filename = "SLM from image.jpg"
+image_converted.Save(filename)
+d = image_result.GetData()
+np_img = np.array(d, dtype='uint8').reshape((1280,1024))
+plt.imshow(np_img)
+plt.show()
+image_result.Release()
 
-    image_result.Release()
+print('create image in python') # image generated on the fly
+slm_lib.Write_image(Super.copy().ctypes.data_as(POINTER(c_ubyte)), 1)
+sleep(1)
+node_softwaretrigger_cmd.Execute() # trigger camera
+sleep(1)
+
+image_result = cam.GetNextImage(5500) # Get frame
+image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
+filename = "SLM generated.jpg"
+image_converted.Save(filename)
+d = image_result.GetData()
+np_img = np.array(d, dtype='uint8').reshape((1280,1024))
+plt.imshow(np_img)
+plt.show()
+image_result.Release() 
 
 
-if(do_cam): cam.EndAcquisition()
+
+cam.EndAcquisition()
 # calculate PSF across all dots
 
 
@@ -279,12 +292,12 @@ laser_board.close()
 print('close connection to laser board')
 
 # close camera
-if(do_cam): 
-    set_trigger_normal(cam)
-    cam.DeInit()
-    del cam
-    del cam_list
-    system.ReleaseInstance()
+
+set_trigger_normal(cam)
+cam.DeInit()
+del cam
+del cam_list
+system.ReleaseInstance()
 
 # close SLM
 slm_lib.Delete_SDK();

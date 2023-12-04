@@ -1,4 +1,4 @@
-// This test script uses the main microscope control board to drive the scan mirror to perform a z-stack
+\// This test script uses the main microscope control board to drive the scan mirror to perform a z-stack
 // also controls the laser board to turn on/off between z-scans 
 // not yet implemented laser (trigger) control between single scans
 

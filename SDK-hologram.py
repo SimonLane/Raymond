@@ -8,6 +8,10 @@ from ctypes import *
 from scipy import misc
 from time import sleep
 
+import imageio.v2 as imageio
+import numpy as np
+image_dir = 'C:/Program Files/Meadowlark Optics/Blink 1920 HDMI/Image Files/'
+
 ################################ MAKE SURE THE WINDOW SHOWS UP IN THE WRITE PLACE FOR THE DPI SETTINGS#############
 # Query DPI Awareness (Windows 10 and 8)
 import ctypes
@@ -79,19 +83,32 @@ WFC = numpy.empty([width.value*height.value*bytpesPerPixel], numpy.uint8, 'C');
 
 # Generate hologram
 iterations = c_uint(10);
-image_lib.Initialize_HologramGenerator(width.value, height.value, depth.value, iterations, RGB);
+image_lib.Initialize_HologramGenerator(width.value, height.value, depth.value, 
+                                       iterations, RGB);
 
-XSpots = numpy.array([16.0], dtype='f');
-YSpots = numpy.array([16.0], dtype='f');
+XSpots = numpy.array([650.0], dtype='f');
+YSpots = numpy.array([1100.0], dtype='f');
 ZSpots = numpy.array([0.0], dtype='f');
-ISpots = numpy.array([0.0], dtype='f');
+ISpots = numpy.array([1.0], dtype='f');
 N_spots = c_uint(1);
 ApplyAffine = c_uint(0);
 
-image_lib.Generate_Hologram(ImageOne.ctypes.data_as(POINTER(c_ubyte)), WFC.ctypes.data_as(POINTER(c_ubyte)), XSpots.ctypes.data_as(POINTER(c_float)), YSpots.ctypes.data_as(POINTER(c_float)), ZSpots.ctypes.data_as(POINTER(c_float)), ISpots.ctypes.data_as(POINTER(c_float)), N_spots, ApplyAffine);
+image_lib.Generate_Hologram(ImageOne.ctypes.data_as(POINTER(c_ubyte)), 
+                            WFC.ctypes.data_as(POINTER(c_ubyte)), 
+                            XSpots.ctypes.data_as(POINTER(c_float)), 
+                            YSpots.ctypes.data_as(POINTER(c_float)), 
+                            ZSpots.ctypes.data_as(POINTER(c_float)), 
+                            ISpots.ctypes.data_as(POINTER(c_float)), 
+                            N_spots, ApplyAffine);
+
+save_as = '%s/single dot.bmp' %image_dir
+imageio.imwrite(save_as, np.reshape(ImageOne.copy(), (1200,1920,4)))
 
 VortexCharge = 3;
-image_lib.Generate_LG(ImageTwo.ctypes.data_as(POINTER(c_ubyte)), WFC.ctypes.data_as(POINTER(c_ubyte)), width.value, height.value, depth.value, VortexCharge, center_x.value, center_y.value, 0, RGB);
+image_lib.Generate_LG(ImageTwo.ctypes.data_as(POINTER(c_ubyte)), 
+                      WFC.ctypes.data_as(POINTER(c_ubyte)), 
+                      width.value, height.value, depth.value, 
+                      VortexCharge, center_x.value, center_y.value, 0, RGB);
 
 # Loop between our images
 for x in range(6):

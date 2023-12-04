@@ -72,6 +72,9 @@ for i in range(3):
     node_softwaretrigger_cmd.Execute()
     time.sleep(1)
     image_result = cam.GetNextImage(1000)
+    d = image_result.GetData()
+    np_img = np.array(d, dtype='uint8').reshape((1280,1024))
+    
     if image_result.IsIncomplete():
         print('Image incomplete with image status %d ...' % image_result.GetImageStatus())
     
@@ -79,12 +82,18 @@ for i in range(3):
         width = image_result.GetWidth()
         height = image_result.GetHeight()
         print('Grabbed Image %d, width = %d, height = %d' % (i, width, height))
-    
+
     image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
+    
+    print(np_img)
+    plt.imshow(np_img)
+    plt.show()
+    
     filename = "PySpin image %d.jpg" %i
     image_converted.Save(filename)
     print('Image saved at %s\n' % filename)
     image_result.Release()
+
     
 cam.EndAcquisition()
 
@@ -95,8 +104,10 @@ del cam_list
 system.ReleaseInstance()
 
 
-for i in range(3):
-    filename = "PySpin image %d.jpg" %i
-    image = cv2.imread(filename)
-    print(image.shape)
-    plt.plot(np.random.rand(50))
+# for i in range(3):
+#     filename = "PySpin image %d.jpg" %i
+#     image = cv2.imread(filename)
+#     #print(image.shape)
+#     plt.imshow(image)
+#     plt.show()
+#     print(i)

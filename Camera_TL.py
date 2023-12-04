@@ -4,9 +4,9 @@ Created on Mon May 10 17:49:12 2021
 
 @author: Simon
 """
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtWidgets
 
-class Camera_TL(QtGui.QWidget):
+class Camera_TL(QtWidgets.QWidget):
     def __init__(self, parent, cam_name, cam_number, SDK):
         super(Camera_TL, self).__init__(parent)
         self.flag_CONNECTED = False
