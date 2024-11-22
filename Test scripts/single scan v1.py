@@ -4,11 +4,11 @@ Created on Wed Jan 25 11:04:01 2023
 
 @author: Simon Lane
 """
-
+from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
 import time, serial, math, os, imageio
 import numpy as np
 import pandas as pd
-from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
+
 # from PIL import Image
 # import matplotlib.pyplot as plt
 
@@ -17,14 +17,14 @@ from thorlabs_tsi_sdk.tl_camera import TLCameraSDK
 # SCAN PARAMETERS
 # =============================================================================
 
-e           = 100           # exposure (ms)
-p           = 50            # power (%)
+e           = 50           # exposure (ms)
+p           = 100            # power (%)
 w           = 488           # wavelength
-z_step      = 0.1           # Z step size in microns
-z_range     = 1             # in microns
+z_step      = 0.05           # Z step size in microns
+z_range     = 10             # in microns
 
-rootLocation = "D:\\Niall\\Z-stacks"
-ExptName = 'test1'
+rootLocation = "D:\\Simon\\Z-stacks"
+ExptName = 'test2'
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 n_steps     = int((z_range/z_step) + 1)
@@ -125,9 +125,9 @@ def shutter():
     
 def get_val16(w,p): #supply wavelength and percentage to retreive the DAC value
     for r in lasers:
-        print(r[0])
+        
         if w == r[0]:
-            # print(w,'is', r[0], 'Min lase value is', r[1])
+            print(w,'is', r[0], 'Min lase value is', r[1])
             DAC = ((2**16 - r[1]) * (p/100)) + r[1]
             return DAC
             
@@ -181,6 +181,7 @@ def move_to(X=None,Y=None,Z=None):
             string = string + ' Z=%s' %(round(Z*10,4))
         string = string + '\r'
         ASI.write(string.encode())
+        print(string)
         ASI.readline()
             
 def move_rel(X=None,Y=None,Z=None):
@@ -199,9 +200,12 @@ def move_rel(X=None,Y=None,Z=None):
         print('sent to ASI:', string)
 
 def move_diag(d):   #in um
-    x = d*math.sin(math.radians(53.2))
-    z = d*math.cos(math.radians(53.2))
-    move_rel(X=x,Z=z)
+# new way using non-cartesean z-axis
+    move_rel(Z=d)
+# old way using combined x and z movement
+    # x = d*math.sin(math.radians(53.2)) 
+    # z = d*math.cos(math.radians(53.2))
+    # move_rel(X=x,Z=z)
 
 def get_position():
     clear_buffer()
@@ -248,7 +252,7 @@ Serialmode() # laser will now accept serial commands
 
 # setup laser
 DAC_value = get_val16(w,p)  #convert percentage into 16-bit value scaled for lasing threshold
-set_power(w, DAC_value)     #turn on the laser
+set_power(w, 58982)     #turn on the laser
 time.sleep(0.3)
 
 # setup the camera
@@ -279,9 +283,11 @@ for i in range(n_steps): # in nm
     # plt.imshow(frame)
     # plt.show()
 # move stage
-    move_diag(0.1)
-    while is_moving(): pass # poll stage for movement
-move_to(X=pre_start[0], Z=pre_start[2]) # put stage back where it came from
+    move_diag(z_step)
+    time.sleep(0.25)
+    # while is_moving(): pass # poll stage for movement
+
+move_to(Z=pre_start[2]) # put stage back where it came from
 while is_moving(): pass # poll stage for movement
 
 print('start:', pre_start)
